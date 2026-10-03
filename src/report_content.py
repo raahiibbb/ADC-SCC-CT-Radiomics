@@ -131,19 +131,20 @@ def CONTENT(b):
     b.p("Almost every lung cancer patient has a chest CT scan before any treatment. On CT, ADC and SCC show "
         "different tendencies. ADC is more often peripheral and may have fuzzy or ground-glass edges, while SCC "
         "is more often central, solid and larger, and is more common in men and heavy smokers. These are "
-        "tendencies and not rules, so the two types often look alike. *Radiomics* tries to capture such "
+        "tendencies and not rules, so the two types often look alike. Radiomics tries to capture such "
         "differences by computing many quantitative features (intensity, texture and shape) from the tumour "
         "region and feeding them to a machine-learning model {cite:aerts2014,pyradiomics}. Our project question "
-        "was therefore: **can a computer tell ADC from SCC using only the CT scan, and does the answer still hold "
-        "at hospitals that were not used for training?**")
+        "was therefore: can a computer tell ADC from SCC using only the CT scan, and does the answer still hold "
+        "at hospitals that were not used for training?")
     b.p("The second half of this question became the centre of the project. Public CT collections come from "
         "different hospitals, and each hospital has its own scanners and its own mix of patients. In our data "
         "one hospital is 75% SCC while the other three are 73% to 81% ADC. A model trained on the pooled data can "
         "learn to recognise the hospital from scanner texture and then guess the majority class of that hospital. "
-        "This is a well-known form of *shortcut learning* {cite:zech2018,geirhos2020}. It gives a good pooled "
+        "This is a well-known form of shortcut learning {cite:zech2018,geirhos2020}. It gives a good pooled "
         "score but fails at a new hospital. A large part of this work was spent on measuring this shortcut and "
         "on building an evaluation that it cannot fool.")
-    b.p("**Objectives.** The objectives of the project were:")
+    b.sub("Objectives")
+    b.p("The objectives of the project were:")
     b.bullets([
         "to build a fully automatic CT pipeline (tumour detection, outlining, feature extraction and "
         "classification) for ADC versus SCC;",
@@ -152,7 +153,8 @@ def CONTENT(b):
         "to compare simple handcrafted models with deep-learning alternatives under the same honest protocol;",
         "to test the frozen model once on two external datasets that were locked until the end.",
     ], numbered=True)
-    b.p("**Why this is a Complex Engineering Problem.** {tab:cep} maps the project to the attributes of a "
+    b.sub("Why this is a Complex Engineering Problem")
+    b.p("{tab:cep} maps the project to the attributes of a "
         "complex engineering problem. The main difficulty is that there is no obvious solution: a higher score "
         "on pooled data can be a worse model, so success itself had to be defined carefully.")
     b.table(["Attribute", "How it appears in this project"], [
@@ -170,7 +172,8 @@ def CONTENT(b):
         ["P7: Interdependence", "Mask quality affects features, features affect harmonisation, harmonisation "
          "affects model selection; a change in one stage changes all later stages."],
     ], "Mapping of the project to the attributes of a complex engineering problem", "cep", widths=[1.6, 4.6])
-    b.p("**Possible alternative solutions.** Several other routes could address the same clinical need. "
+    b.sub("Possible alternative solutions")
+    b.p("Several other routes could address the same clinical need. "
         "{tab:alt} compares them with the approach we chose.")
     b.table(["Alternative", "Advantage", "Disadvantage"], [
         ["Biopsy only (current practice)", "Gold standard; also gives tissue for gene tests", "Invasive, risky, "
@@ -180,7 +183,7 @@ def CONTENT(b):
          "scanner style (shown in Section 5.3)"],
         ["Single-hospital radiomics", "Simple, high internal scores", "Rarely transfers to other hospitals"],
         ["PET/CT based model", "Uses metabolic information", "PET is not available for every patient"],
-        ["**Multi-hospital harmonised radiomics (chosen)**", "Works with routine CT, small models, honest "
+        ["Multi-hospital harmonised radiomics (chosen)", "Works with routine CT, small models, honest "
          "multi-centre evaluation", "Moderate accuracy; sensitive to thick CT slices"],
     ], "Alternative solutions considered", "alt", widths=[1.8, 2.1, 2.3])
 
@@ -188,7 +191,7 @@ def CONTENT(b):
     b.h1("Design")
     b.h2("Problem Formulation (PO(b))")
     b.h3("Identification of Scope")
-    b.p("The scope of the project was fixed after the progress presentation (Week 10). **In scope:**")
+    b.p("The scope of the project was fixed after the progress presentation (Week 10). In scope:")
     b.bullets([
         "binary classification of ADC versus SCC from a pre-treatment chest CT scan and the patient's age and sex;",
         "public, de-identified CT collections from The Cancer Imaging Archive (TCIA) {cite:clark2013} and the NCI "
@@ -197,12 +200,13 @@ def CONTENT(b):
         "evaluation inside the development hospitals (cross-validation), on unseen development hospitals "
         "(leave-one-hospital-out) and on two locked external datasets.",
     ])
-    b.p("**Out of scope:** other NSCLC types (large cell, not otherwise specified), PET images, gene mutation "
+    b.p("Out of scope: other NSCLC types (large cell, not otherwise specified), PET images, gene mutation "
         "prediction, survival prediction, and any clinical deployment. The model is a research decision-support "
         "tool, not a replacement for biopsy.")
 
     b.h3("Literature Review")
-    b.p("**Radiomics for histologic subtype.** Zhu *et al.* {cite:zhu2018} used five LASSO-selected radiomic "
+    b.sub("Radiomics for histologic subtype")
+    b.p("Zhu *et al.* {cite:zhu2018} used five LASSO-selected radiomic "
         "features on 129 patients from one hospital and reported an AUC of 0.91, but without external testing. "
         "Yang *et al.* {cite:yang2021} studied 645 patients from three centres. When centres were mixed randomly "
         "the AUC was about 0.78, but when the model was trained on one centre and tested on another it fell to "
@@ -211,22 +215,26 @@ def CONTENT(b):
         "pooled performance came from dataset differences. Song *et al.* {cite:song2023} collected 868 patients from "
         "eight TCIA databases and reported AUCs of 0.82 internally and 0.82 and 0.80 on TCGA and Lung3, choosing "
         "the best of 130 radiomics models and using expert tumour masks.")
-    b.p("**Deep learning.** Chaunzwa *et al.* {cite:chaunzwa2021} trained a CNN on 311 patients from one hospital "
+    b.sub("Deep learning")
+    b.p("Chaunzwa *et al.* {cite:chaunzwa2021} trained a CNN on 311 patients from one hospital "
         "(internal AUC 0.71) and obtained 0.60 on an external Lung3 subset. Chen *et al.* {cite:chen2023} used a "
         "multi-task CNN on 402 TCIA patients (internal 0.84, external 0.73). Foundation models pre-trained on large "
         "CT collections, such as FMCIB {cite:fmcib} and CT-FM {cite:ctfm}, give general-purpose image features that "
         "can be reused without training a network from scratch.")
-    b.p("**Peritumoral and local information.** Tang *et al.* {cite:tang2022} showed that features from the region "
+    b.sub("Peritumoral and local information")
+    b.p("Tang *et al.* {cite:tang2022} showed that features from the region "
         "around the tumour add information to those from inside it. Vuong *et al.* {cite:vuong2020} used local "
         "radiomic activation maps to see where the signal lies inside and around the tumour. Weakly supervised "
         "attention-based multiple instance learning (MIL) {cite:ilse2018,lu2021} learns from many local patches "
         "when only a patient-level label exists; this was the starting idea of our project.")
-    b.p("**Multi-centre effects.** ComBat {cite:johnson2007} was designed to remove batch effects in gene "
+    b.sub("Multi-centre effects")
+    b.p("ComBat {cite:johnson2007} was designed to remove batch effects in gene "
         "expression data and has been adapted to radiomics {cite:orlhac2018}. Shortcut learning of hospital "
         "identity was documented in chest radiographs {cite:zech2018} and in deep networks in general "
         "{cite:geirhos2020}. Radiomic feature definitions are standardised by the IBSI {cite:ibsi}, but "
         "standard definitions do not remove scanner differences.")
-    b.p("**Gap.** Most published ADC/SCC models report high scores from one hospital or from random splits of "
+    b.sub("Gap")
+    b.p("Most published ADC/SCC models report high scores from one hospital or from random splits of "
         "pooled data. Very few measure how much of the score is explained by the hospital itself, and very few "
         "test a model that was frozen before the external labels were opened. Our project addresses this gap.")
 
@@ -242,15 +250,15 @@ def CONTENT(b):
     b.eq(r"f^{*}=\underset{f}{\mathrm{arg\,max}}\ \mathbb{E}_{h^{*}\notin\mathcal{H}_{\mathrm{train}}}\left[\mathrm{AUC}_{h^{*}}(f)\right]", "goal")
     b.p("From this goal we derived the following design requirements:")
     b.bullets([
-        "**R1.** The metric used for model selection must give 0.5 to any predictor that only knows the hospital.",
-        "**R2.** Every fitted step (imputation, harmonisation, scaling, feature selection, hyperparameters) must "
+        "R1. The metric used for model selection must give 0.5 to any predictor that only knows the hospital.",
+        "R2. Every fitted step (imputation, harmonisation, scaling, feature selection, hyperparameters) must "
         "use training patients only.",
-        "**R3.** Tumour masks must be produced by the same automatic method at every hospital, so that the mask "
+        "R3. Tumour masks must be produced by the same automatic method at every hospital, so that the mask "
         "source cannot become a new hospital fingerprint.",
-        "**R4.** A new hospital must be processed without its labels.",
-        "**R5.** The model must be small enough to train on a laptop GPU (4 GB) and to avoid overfitting about "
+        "R4. A new hospital must be processed without its labels.",
+        "R5. The model must be small enough to train on a laptop GPU (4 GB) and to avoid overfitting about "
         "1000 patients.",
-        "**R6.** External tests must be pre-registered, frozen with a hash and scored once.",
+        "R6. External tests must be pre-registered, frozen with a hash and scored once.",
     ])
 
     b.h3("Analysis")
@@ -262,12 +270,12 @@ def CONTENT(b):
           "dataset", width=5.6)
     b.eq(r"s_i=\pi_{h_i},\qquad \pi_h=\frac{n_{h,1}}{n_{h,1}+n_{h,0}}", "siteonly")
     b.p("Every ADC patient from a high-ADC hospital is ranked above every SCC patient from LUNG1, so this predictor "
-        "obtains a pooled AUC of **0.710** on our 1041 patients ({fig:shortcut}). A naive radiomics model scores "
+        "obtains a pooled AUC of 0.710 on our 1041 patients ({fig:shortcut}). A naive radiomics model scores "
         "0.727, which is only slightly better than knowing the hospital. A pooled AUC around 0.7 therefore says "
         "very little about whether a model has learned anything about the tumour.")
     b.p("To satisfy requirement R1 we weight each patient by the inverse size of its (hospital, class) group:")
     b.eq(r"w_i=\frac{1}{H\cdot n_{h_i,y_i}}", "weights")
-    b.p("and define the **site-balanced AUC** as the weighted version of {eq:auc}:")
+    b.p("and define the site-balanced AUC as the weighted version of {eq:auc}:")
     b.eq(r"\mathrm{AUC}_{\mathrm{SB}}=\frac{\sum_{i:y_i=1}\sum_{j:y_j=0}w_iw_j\left[\mathbb{1}(s_i>s_j)+\frac{1}{2}\mathbb{1}(s_i=s_j)\right]}{\sum_{i:y_i=1}w_i\ \sum_{j:y_j=0}w_j}", "sbauc")
     b.p("After weighting, each of the $2H$ (hospital, class) groups has the same total weight $1/H$. For the "
         "hospital-only predictor of {eq:siteonly}, pairs from the same hospital are ties and contribute 1/2. For "
@@ -326,8 +334,8 @@ def CONTENT(b):
     b.p("Entropy $H$ measures randomness of intensity, GLCM contrast measures local intensity jumps, and short "
         "run emphasis (SRE) is large when the texture is fine. The final model uses two feature blocks:")
     b.bullets([
-        "**Shells block (279 features):** 93 texture features in each of the three shells.",
-        "**Position + clinical block (13 features):** left or right lung; relative lateral, front-back and "
+        "Shells block (279 features): 93 texture features in each of the three shells.",
+        "Position + clinical block (13 features): left or right lung; relative lateral, front-back and "
         "up-down position of the tumour centre; normalised distance from the midline; depth of the centre (in mm "
         "and relative); fraction of the tumour surface touching the lung boundary and the medial (mediastinal) "
         "part of it; fraction of the tumour outside the lung; log tumour volume; age; sex.",
@@ -352,7 +360,7 @@ def CONTENT(b):
     b.p("until they converge. The harmonised feature is")
     b.eq(r"x^{*}_{ihg}=\hat{\sigma}_g\,\frac{z_{ihg}-\gamma^{*}_{hg}}{\sqrt{\delta^{*}_{hg}}}+\hat{\alpha}_g", "combat_adj")
     b.p("ComBat is fitted on the training patients of each fold only. A hospital that was not in the training "
-        r"data (an unseen or external hospital) gets its own $\hat{\gamma}$ and $\hat{\delta}$ from its *unlabelled* "
+        r"data (an unseen or external hospital) gets its own $\hat{\gamma}$ and $\hat{\delta}$ from its unlabelled "
         "features with {eq:combat_raw}, so no test label is used. {fig:combat_demo} shows the effect on one real "
         "feature: before ComBat the LUNG1 curve is clearly shifted, after ComBat the four hospitals overlap.")
     b.fig("fig_combat_demo.png", "Effect of ComBat on one shell feature (10th-percentile HU in the 0-4 mm shell) "
@@ -364,7 +372,7 @@ def CONTENT(b):
         "missing values are replaced by the training median. After ComBat every feature is z-scored with the "
         "training mean and standard deviation, "
         r"$\tilde{x}_{ig}=(x^{*}_{ig}-\mu^{\mathrm{tr}}_g)/s^{\mathrm{tr}}_g$. Features are then ranked by how "
-        "well they separate ADC from SCC *within* each hospital:")
+        "well they separate ADC from SCC within each hospital:")
     b.eq(r"\rho_g=\frac{1}{H}\sum_{h=1}^{H}\left|\mathrm{AUC}_h(\tilde{x}_g)-0.5\right|", "rank")
     b.p(r"where $\mathrm{AUC}_h$ is computed with {eq:auc} on hospital $h$ only. Ranking within hospitals avoids "
         "choosing features that mainly separate hospitals. Going down the ranked list, a feature is skipped if its "
@@ -374,23 +382,23 @@ def CONTENT(b):
     b.h3("Classifiers")
     b.p("Four classic models are trained on each block, all with the sample weights $w_i$ of {eq:weights} "
         "(implemented with scikit-learn {cite:sklearn} and LightGBM {cite:ke2017}).")
-    b.p("**(1) L2 logistic regression** models the ADC probability with the sigmoid function and minimises the "
+    b.p("(1) L2 logistic regression models the ADC probability with the sigmoid function and minimises the "
         "weighted log-loss plus an L2 penalty:")
     b.eq(r"p(\mathbf{x})=\frac{1}{1+e^{-(\boldsymbol{\beta}^{\top}\mathbf{x}+\beta_0)}}", "sigmoid")
     b.eq(r"\min_{\boldsymbol{\beta},\beta_0}\ \frac{1}{2}\|\boldsymbol{\beta}\|_2^2+C\sum_{i=1}^{n}w_i\left[-y_i\log p(\mathbf{x}_i)-(1-y_i)\log\left(1-p(\mathbf{x}_i)\right)\right]", "logreg")
     b.p("A small $C$ means a strong penalty, so the weights stay small and the model stays simple.")
-    b.p(r"**(2) Support vector machine** {cite:cortes1995} with labels $t_i=2y_i-1\in\{-1,+1\}$ finds the "
+    b.p(r"(2) Support vector machine {cite:cortes1995} with labels $t_i=2y_i-1\in\{-1,+1\}$ finds the "
         "boundary with the widest margin, allowing some violations $\\xi_i$:")
     b.eq(r"\min_{\mathbf{v},b,\boldsymbol{\xi}}\ \frac{1}{2}\|\mathbf{v}\|^2+C\sum_{i}w_i\xi_i\quad \mathrm{s.t.}\quad t_i\left(\mathbf{v}^{\top}\phi(\mathbf{x}_i)+b\right)\ge1-\xi_i,\ \ \xi_i\ge0", "svm")
     b.p("Its decision function uses the radial basis function (RBF) kernel, which allows a curved boundary:")
     b.eq(r"f(\mathbf{x})=\sum_{i}\alpha_i t_i K(\mathbf{x}_i,\mathbf{x})+b,\qquad K(\mathbf{x},\mathbf{x}')=\exp\left(-\gamma_K\|\mathbf{x}-\mathbf{x}'\|^2\right),\quad \gamma_K=\frac{1}{p\,\mathrm{Var}(X)}", "rbf")
-    b.p("**(3) LightGBM** {cite:ke2017} builds 200 small decision trees one after another. Each new tree "
+    b.p("(3) LightGBM {cite:ke2017} builds 200 small decision trees one after another. Each new tree "
         "$h_m$ is fitted to the errors (negative gradients) of the current model and added with a learning "
         "rate $\\eta=0.03$, for $m=1,\\dots,200$:")
     b.eq(r"F_m(\mathbf{x})=F_{m-1}(\mathbf{x})+\eta\,h_m(\mathbf{x}),\qquad r_{im}=y_i-\sigma\left(F_{m-1}(\mathbf{x}_i)\right)", "boost")
     b.p("The trees have 4 or 8 leaves, at least 10 patients per leaf, and use 80% of patients and 50% of "
         "features per tree, which limits overfitting.")
-    b.p("**(4) Ridge logistic regression on all features** is {eq:logreg} with every feature of the block "
+    b.p("(4) Ridge logistic regression on all features is {eq:logreg} with every feature of the block "
         "(no top-k) and a very small $C\\in[10^{-4},10^{-2}]$. It captures weak signal that is spread thinly over "
         "many correlated features.")
 
@@ -413,7 +421,7 @@ def CONTENT(b):
         "patients are resampled with replacement inside each (hospital, class) group $B=2000$ times, the metric "
         r"is recomputed each time, and the 95% confidence interval is $[\hat{\theta}^{*}_{(2.5)},\ "
         r"\hat{\theta}^{*}_{(97.5)}]$. The amount of hospital information left in the features is measured by a "
-        "*hospital detector*: a one-versus-rest logistic regression trained to predict the hospital, scored on "
+        "hospital detector: a one-versus-rest logistic regression trained to predict the hospital, scored on "
         "the test fold,")
     b.eq(r"\mathrm{Leak}=\frac{1}{H}\sum_{h=1}^{H}\mathrm{AUC}\left(\mathbb{1}[h_i=h],\ g_h(\tilde{\mathbf{x}}_i)\right)", "leak")
     b.p("A value near 0.5 means the hospital can no longer be recognised. For visualisation we also use PCA, "
@@ -428,12 +436,12 @@ def CONTENT(b):
     b.fig("fig_pipeline.png", "Block diagram of the complete pipeline. Steps in the lower row are fitted on "
           "training data only and then frozen.", "pipeline", width=6.2)
     b.bullets([
-        "**Chest CT and preprocessing:** DICOM to NIfTI, 2 mm isotropic resampling, HU clipping ({eq:interp}, {eq:bins}).",
-        "**Tumour detection and segmentation:** expert box or TotalSegmentator box, then MedSAM2 outline.",
-        "**Peritumoral shells:** three distance bands around the tumour ({eq:shells}).",
-        "**Feature extraction:** 279 shell texture features and 13 position and clinical features.",
-        "**ComBat, selection and classifiers:** {eq:combat} to {eq:boost}, inside each training fold.",
-        "**Decision:** fused score $s$ of {eq:fusion}; $s>0$ means ADC.",
+        "Chest CT and preprocessing: DICOM to NIfTI, 2 mm isotropic resampling, HU clipping ({eq:interp}, {eq:bins}).",
+        "Tumour detection and segmentation: expert box or TotalSegmentator box, then MedSAM2 outline.",
+        "Peritumoral shells: three distance bands around the tumour ({eq:shells}).",
+        "Feature extraction: 279 shell texture features and 13 position and clinical features.",
+        "ComBat, selection and classifiers: {eq:combat} to {eq:boost}, inside each training fold.",
+        "Decision: fused score $s$ of {eq:fusion}; $s>0$ means ADC.",
     ])
 
     # ---------------------------------------- model architecture (replaces simulation model)
@@ -463,14 +471,16 @@ def CONTENT(b):
     # ---------------------------------------- training/validation (replaces CAD)
     b.h2("Training and Validation Design")
     b.p("Two complementary validation schemes were used ({fig:cv_scheme}).")
-    b.p("**Repeated nested cross-validation.** Patients are split into 5 folds, stratified by hospital and class "
+    b.sub("Repeated nested cross-validation")
+    b.p("Patients are split into 5 folds, stratified by hospital and class "
         "so that every fold has all eight (hospital, class) groups. Four folds train the model and the fifth "
         "tests it. Inside the training part, an inner 3-fold cross-validation chooses the hyperparameters "
         "($k$, $C$, number of leaves) by the site-balanced AUC; the model is then refitted on the whole training "
         "part. The outer loop is repeated with 5 random seeds (42-46), giving 25 test runs. Nested "
         "cross-validation avoids the optimistic bias that appears when hyperparameters are tuned on the test "
         "fold {cite:varma2006}.")
-    b.p("**Leave-one-hospital-out (LOSO).** The model is trained (with the same inner tuning) on three hospitals "
+    b.sub("Leave-one-hospital-out (LOSO)")
+    b.p("The model is trained (with the same inner tuning) on three hospitals "
         "and tested on the fourth, which is mapped into the training reference by label-free ComBat. This is "
         "repeated for all four hospitals and is the closest simulation of using the model at a new hospital.")
     b.fig("fig_cv_scheme.png", "Validation design: (a) repeated nested cross-validation with an inner 3-fold "
@@ -498,9 +508,8 @@ def CONTENT(b):
 
     # ---------------------------------------- source code (replaces firmware)
     b.h2("Core Source Code")
-    b.p("The project was written in Python (about 90 scripts). The complete code with configuration files, "
-        "saved splits and logs is in the project folder (see Section 7.3). The most important parts are listed "
-        "below in the template's two-column code format: the site-balanced metric and feature ranking "
+    b.p("The project was written in Python, and the complete code is available in the GitHub repository given "
+        "in Section 7.3. The most important parts are listed below: the site-balanced metric and feature ranking "
         "({tab:code1}), the ComBat harmoniser ({tab:code2}), and nested model selection, ensembling and "
         "leave-one-hospital-out testing ({tab:code3}).")
     (a1, a2), (c1, c2), (d1, d2) = code_blocks()
@@ -514,7 +523,8 @@ def CONTENT(b):
     # ------------------------------------------------------------ implementation
     b.h1("Implementation")
     b.h2("Description")
-    b.p("**Environment.** All work ran on one laptop. {tab:env} lists the hardware and main software. Three "
+    b.sub("Environment")
+    b.p("All work ran on one laptop. {tab:env} lists the hardware and main software. Three "
         "separate Python environments were needed because MedSAM2, TotalSegmentator and the main pipeline "
         "require different PyTorch versions.")
     b.table(["Item", "Details"], [
@@ -527,14 +537,16 @@ def CONTENT(b):
         ["Data download", "NBIA Data Retriever (TCIA), s5cmd and idc-index (IDC)"],
         ["Reporting", "Matplotlib, python-pptx, python-docx"],
     ], "Implementation environment", "env", widths=[1.8, 4.4])
-    b.p("**Data preparation.** The DICOM series were downloaded (about 90 GB in total), checked for geometry "
+    b.sub("Data preparation")
+    b.p("The DICOM series were downloaded (about 90 GB in total), checked for geometry "
         "(spacing, orientation, missing slices) and converted to NIfTI. {fig:ct_before} shows one LUNG1 scan "
         "before and after preprocessing. In the original grid the coronal view looks squashed because the slices "
         "are 3 mm apart while pixels are about 1 mm; after resampling the anatomy has the correct proportions and "
         "the HU window makes lung and soft tissue easy to see.")
     b.fig("ct_before_after.png", "Preprocessing of patient LUNG1-001: original axial and coronal views (left) "
           "and the same views after 2 mm isotropic resampling and HU clipping (right).", "ct_before", width=4.6)
-    b.p("**Segmentation.** Our first segmentation method kept voxels above -750 HU inside the box and cleaned "
+    b.sub("Segmentation")
+    b.p("Our first segmentation method kept voxels above -750 HU inside the box and cleaned "
         "the result with morphology. It worked with tight boxes but leaked into the chest wall when the box was "
         "loose, which was the case for the NLST boxes. MedSAM2 was therefore adopted for all 1041 patients "
         "(38 minutes on the laptop GPU, no failures). The settings were chosen on 40 expert outlines using the "
@@ -547,26 +559,28 @@ def CONTENT(b):
     b.fig("fig_dice.png", "Mean Dice against expert outlines for tight boxes and loose boxes (+8 mm on each side, "
           "which imitates an automatic detector). MedSAM2 is better in all four cases and much better with "
           "loose boxes.", "dice", width=4.8)
-    b.p("**Feature extraction.** Shells were built with a Euclidean distance transform ({eq:shells}); "
+    b.sub("Feature extraction")
+    b.p("Shells were built with a Euclidean distance transform ({eq:shells}); "
         "{fig:shells} shows them on a real scan. PyRadiomics extraction for all regions took about 20 minutes "
         "and position features about 13 minutes using parallel jobs, with no failures in the development data. "
         "Extraction was run once and the features were saved, so model training never recomputed them.")
     b.fig("shells_on_ct.png", "Tumour (GTV) and the three peritumoral shells at 0-4, 4-8 and 8-12 mm on an axial "
           "CT slice.", "shells", width=3.6)
-    b.p("**Training.** One full 5 x 5 nested cross-validation of one feature block takes about 10 seconds to a "
+    b.sub("Training")
+    b.p("One full 5 x 5 nested cross-validation of one feature block takes about 10 seconds to a "
         "few minutes with 14 parallel jobs, because the models are small. All splits, random seeds, chosen "
         "hyperparameters, out-of-fold predictions, metrics and package versions were saved for reproducibility.")
     b.h2("Implementation Challenges")
     b.bullets([
-        "**Different DICOM types.** Eight Lung-PET-CT-Dx patients had annotations only on a secondary-capture "
+        "Different DICOM types. Eight Lung-PET-CT-Dx patients had annotations only on a secondary-capture "
         "image without 3-D geometry; they were excluded by rule.",
-        "**Loose boxes in NLST.** The NLST boxes were about three times larger than the tumour, so the threshold "
+        "Loose boxes in NLST. The NLST boxes were about three times larger than the tumour, so the threshold "
         "segmentation absorbed chest wall. This was solved by MedSAM2.",
-        "**Software conflicts.** Installing one foundation-model package replaced the GPU version of PyTorch "
-        "with a CPU version during a run. The environment was repaired and later installs used `--no-deps`.",
-        "**Large downloads on Windows.** The s5cmd tool failed to rename files across drives, so downloads were "
+        "Software conflicts. Installing one foundation-model package replaced the GPU version of PyTorch "
+        "with a CPU version during a run. The environment was repaired, and later packages were installed without changing the existing ones.",
+        "Large downloads on Windows. The s5cmd tool failed to rename files across drives, so downloads were "
         "run from the destination drive with relative paths.",
-        "**Limited GPU memory (4 GB).** Fine-tuning used a frozen backbone with only the last block trained, and "
+        "Limited GPU memory (4 GB). Fine-tuning used a frozen backbone with only the last block trained, and "
         "cached augmented crops.",
     ])
 
@@ -576,17 +590,17 @@ def CONTENT(b):
     b.p("We did not invent ComBat, MedSAM2 or weighted AUC individually. The novelty of the project lies in how "
         "they are combined and in how the model is evaluated:")
     b.bullets([
-        "**Explicit measurement of the hospital shortcut for ADC/SCC.** We show that the hospital name alone "
+        "Explicit measurement of the hospital shortcut for ADC/SCC. We show that the hospital name alone "
         "gives a pooled AUC of 0.71 and use a site-balanced AUC that provably gives 0.5 to any hospital-only "
         "predictor ({eq:proof}). The honest score improved from 0.642 (naive model) to 0.722.",
-        "**Fully automatic, uniform tumour outlining.** TotalSegmentator plus a single MedSAM2 box prompt gives "
+        "Fully automatic, uniform tumour outlining. TotalSegmentator plus a single MedSAM2 box prompt gives "
         "masks at Dice 0.85 against experts, with the same method at every hospital so that the mask source is "
         "not a hidden fingerprint.",
-        "**Four hospitals, 1041 patients, three countries.** To our knowledge this is one of the largest public "
+        "Four hospitals, 1041 patients, three countries. To our knowledge this is one of the largest public "
         "multi-hospital sets used for this task, and it allowed leave-one-hospital-out testing (0.714).",
-        "**Locked, pre-registered external tests.** The plan was written first, predictions were hashed before the "
+        "Locked, pre-registered external tests. The plan was written first, predictions were hashed before the "
         "labels were opened, and each test was scored once (Lung3 0.686, TCGA 0.585).",
-        "**A fair comparison of simple and deep models.** Attention-MIL, CNN features, two foundation models and "
+        "A fair comparison of simple and deep models. Attention-MIL, CNN features, two foundation models and "
         "adversarial fine-tuning were all tested under the same protocol and all scored lower.",
     ])
 
@@ -640,8 +654,9 @@ def CONTENT(b):
         ["NLST", "USA, screening trial", "397 (290/107)", "2 mm", "expert boxes (Sybil)", "development"],
         ["Lung3 (Radiomics-Genomics)", "Netherlands, surgical", "79 (44/35)", "4-5 mm", "automatic", "locked test"],
         ["TCGA-LUAD / LUSC", "USA, 9 hospitals", "84 (48/36)", "5 mm (2/3 of scans)", "automatic", "locked test"],
-    ], "Datasets used in this project", "data", widths=[1.35, 1.45, 0.95, 0.85, 0.95, 0.75], size=8.5)
-    b.p("**Inclusion rules.** Patients needed a pre-treatment CT series and a pathology label of ADC or SCC. "
+    ], "Datasets used in this project", "data", widths=[1.3, 1.35, 0.9, 0.8, 0.9, 0.95], size=8.5)
+    b.sub("Inclusion rules")
+    b.p("Patients needed a pre-treatment CT series and a pathology label of ADC or SCC. "
         "Mixed or unclear types were excluded: in NLST 155 patients whose first cancer was not ADC or SCC and 29 "
         "with more than one lung primary; in Lung-PET-CT-Dx 8 patients with secondary-capture images; in Lung3 "
         "10 patients with NSCLC not otherwise specified, large cell neuroendocrine or mixed histology; in TCGA 19 "
@@ -649,7 +664,8 @@ def CONTENT(b):
         "image-based predictions.")
 
     b.h3("Results and Analysis")
-    b.p("**(a) Early approach: attention-MIL on local patches.** The project began with a weakly supervised "
+    b.sub("Early approach: attention-MIL on local patches")
+    b.p("The project began with a weakly supervised "
         "attention-MIL model on LUNG1 {cite:ilse2018,lu2021}, where each patient was a bag of 1 cm radiomic "
         "patches. {tab:mil} summarises these trials, which were shown at the progress presentation. Attention did "
         "not reliably beat simple mean pooling, and the best result after adding a second cohort (0.675) was later "
@@ -665,11 +681,13 @@ def CONTENT(b):
         ["7", "LUNG1 + Radiogenomics merged", "0.675 (pooled)", "partly hospital shortcut"],
     ], "Summary of the early attention-MIL phase (before the progress presentation)", "mil",
         widths=[0.45, 2.3, 1.35, 2.1], size=9)
-    b.p("**(b) The hospital shortcut (E1).** As shown in {fig:shortcut}, the hospital name alone gives a pooled "
+    b.sub("The hospital shortcut (E1)")
+    b.p("As shown in {fig:shortcut}, the hospital name alone gives a pooled "
         "AUC of 0.710 and the naive radiomics model 0.727. Under the site-balanced AUC these become 0.497 and "
         "0.642. All later results use the site-balanced metric.")
-    b.p("**(c) Main cross-validation result.** The final model reached a site-balanced AUC of **0.722 (95% CI "
-        "0.687-0.762)** over 5 seeds x 5 folds on 1041 patients, with a standard deviation over seeds below 0.01. "
+    b.sub("Main cross-validation result")
+    b.p("The final model reached a site-balanced AUC of 0.722 (95% CI "
+        "0.687-0.762) over 5 seeds x 5 folds on 1041 patients, with a standard deviation over seeds below 0.01. "
         "{fig:roc} shows the ROC curve inside each hospital, built from out-of-fold predictions averaged over the "
         "seeds. Every curve is above the diagonal. Lung-PET-CT-Dx is the easiest hospital (0.85) and LUNG1 the "
         "hardest (0.63). In LUNG1, 78% of patients are stage III, and at that stage ADC and SCC tumours have "
@@ -688,18 +706,20 @@ def CONTENT(b):
         ["NLST", "397 (290/107)", "0.694", "0.662", "0.645", "0.653"],
         ["All (site-balanced)", "1041 (697/344)", "0.722", "0.607", "0.680", "0.644"],
     ], "Cross-validation results per hospital at the threshold s = 0", "perhosp",
-        widths=[1.4, 1.2, 0.7, 0.9, 0.9, 1.0], align="lccccc", bold_last=True)
+        widths=[1.4, 1.2, 0.7, 0.9, 0.9, 1.0], align="lccccc")
     b.fig("fig_confusion.png", "Confusion matrices at the threshold s = 0 for cross-validation and the two "
           "locked external tests. Percentages are per true class.", "confusion", width=6.2)
-    b.p("**(d) Unseen hospitals (LOSO, E6).** {fig:loso} compares each hospital's score when it was part of the "
+    b.sub("Unseen hospitals (LOSO, E6)")
+    b.p("{fig:loso} compares each hospital's score when it was part of the "
         "training data (pooled CV) with its score when it was left out completely. The drop is very small "
-        "(at most 0.017), and the LOSO mean is **0.714**, almost equal to the pooled 0.722. This suggests that the "
+        "(at most 0.017), and the LOSO mean is 0.714, almost equal to the pooled 0.722. This suggests that the "
         "model does not rely on memorised hospital style. More hospitals helped: with three training hospitals "
         "the LOSO mean was 0.678, and adding NLST raised it to 0.704 with the earlier masks, mostly by improving "
         "the held-out Lung-PET-CT-Dx score from 0.735 to 0.839.")
     b.fig("fig_loso.png", "AUC of each hospital in pooled cross-validation (light bars) and when the hospital "
           "was left out of training (coloured bars).", "loso", width=5.0)
-    b.p("**(e) Harmonisation (E4).** {fig:pca} shows the shell features projected by PCA. Before ComBat, LUNG1 "
+    b.sub("Harmonisation (E4)")
+    b.p("{fig:pca} shows the shell features projected by PCA. Before ComBat, LUNG1 "
         "forms its own cloud; after ComBat the hospitals overlap. {fig:siteleak} measures this with the hospital "
         "detector of {eq:leak}: it fell from 0.81-0.91 to 0.56-0.64 for the radiomics and position blocks. The "
         "site-balanced AUC changed by only -0.004 to +0.020 per block. ComBat therefore does not raise the score; "
@@ -708,7 +728,8 @@ def CONTENT(b):
           "coloured by hospital.", "pca", width=5.8)
     b.fig("fig_siteleak.png", "Hospital-detector AUC before and after ComBat (three-hospital stage). 0.5 means "
           "the hospital cannot be recognised.", "siteleak", width=4.6)
-    b.p("**(f) Ablation (E3, E5).** {fig:ablation} shows the site-balanced AUC of each feature block and of the "
+    b.sub("Ablation (E3, E5)")
+    b.p("{fig:ablation} shows the site-balanced AUC of each feature block and of the "
         "fusions, all with MedSAM2 masks and ComBat. The handcrafted blocks are close to each other (0.698-0.709), "
         "the two deep-feature blocks are clearly lower, and fusing shells with position gives the best "
         "pre-specified result. {tab:ablation} lists the effect of each design change.")
@@ -723,7 +744,8 @@ def CONTENT(b):
         ["Single model to 4-model ensemble (shells)", "0.677-0.697", "0.700", "ensemble is more stable"],
     ], "Effect of individual design changes (site-balanced AUC unless stated)", "ablation",
         widths=[2.3, 0.9, 0.9, 2.1], align="lccl")
-    b.p("**(g) Ensemble and tuning.** {fig:models} compares each classifier with the ensemble. No single model is "
+    b.sub("Ensemble and tuning")
+    b.p("{fig:models} compares each classifier with the ensemble. No single model is "
         "best in both blocks (ridge is best for shells, SVM for position), but the four-model ensemble is better "
         "than every single model in both blocks, and fusing the two blocks adds a further 0.013. {fig:hparams} "
         "shows which hyperparameters the inner cross-validation chose in the 25 outer folds. The simplest option "
@@ -733,7 +755,8 @@ def CONTENT(b):
           "the fused final model.", "models", width=5.6)
     b.fig("fig_hparams.png", "How often each hyperparameter value was chosen by the inner 3-fold "
           "cross-validation in the 25 outer folds.", "hparams", width=6.2)
-    b.p("**(h) Deep-learning alternatives (E7).** {tab:deep} lists the larger models that were tried under the "
+    b.sub("Deep-learning alternatives (E7)")
+    b.p("{tab:deep} lists the larger models that were tried under the "
         "same protocol. Frozen FMCIB features {cite:fmcib} reached 0.675. CT-FM {cite:ctfm} reached 0.662 and kept "
         "hospital information even after ComBat (detector 0.765), probably because its whole-CT pre-training "
         "encodes scanner style. Fine-tuning the last block of FMCIB (35 million parameters) with a gradient-reversal "
@@ -748,16 +771,18 @@ def CONTENT(b):
         ["Fine-tuned CNN + adversary", "0.606", "0.651", "0.815", "adversary did not remove hospital"],
         ["Final model (shells + position)", "0.722", "0.714", "0.54-0.61", "best and simplest"],
     ], "Deep-learning alternatives compared with the final model", "deep",
-        widths=[1.85, 0.95, 0.75, 0.9, 1.75], align="lcccl", bold_last=True, size=9)
-    b.p("**(i) Project journey.** {fig:journey} shows the main AUC at each stage of the project. The points use "
+        widths=[1.85, 0.95, 0.75, 0.9, 1.75], align="lcccl", size=9)
+    b.sub("Project journey")
+    b.p("{fig:journey} shows the main AUC at each stage of the project. The points use "
         "different data and metrics, so the plot tells the story rather than giving a strict comparison. The "
         "largest improvements after the progress presentation came from more hospitals, a fair metric and better "
         "masks, not from bigger models.")
     b.fig("fig_journey.png", "AUC at each stage of the project. The red line marks the progress presentation.",
           "journey", width=6.0)
-    b.p("**(j) Locked external tests (E8).** {fig:external} and {tab:external} show the two pre-registered "
-        "results. On **Lung3** the model reached **0.686** (95% CI 0.557-0.807), close to the expected LOSO level "
-        "of 0.714. On **TCGA** it reached **0.585** (0.462-0.707). Slice thickness was important in both tests: on "
+    b.sub("Locked external tests (E8)")
+    b.p("{fig:external} and {tab:external} show the two pre-registered "
+        "results. On Lung3 the model reached 0.686 (95% CI 0.557-0.807), close to the expected LOSO level "
+        "of 0.714. On TCGA it reached 0.585 (0.462-0.707). Slice thickness was important in both tests: on "
         "thin slices (at most 2.5 mm) the AUC was 0.90 on Lung3 and 0.73 on TCGA, while on thick slices it was "
         "0.68 and 0.51. These subgroups are small (18 and 29 thin-slice patients), so they are hints rather than "
         "proof. TCGA has a further problem: each of its 9 contributing hospitals sent only ADC or only SCC "
@@ -772,10 +797,11 @@ def CONTENT(b):
     ], "Locked external test results of the pre-registered model. The thin/thick split was pre-declared for "
        "Lung3 and post hoc for TCGA.", "external", widths=[0.65, 0.8, 1.3, 0.5, 0.5, 0.5, 0.95, 0.95],
         align="lcccccccc"[:8], size=8.5)
-    b.p("**(k) Comparison with existing work.** {tab:compare} places our results next to published studies. "
+    b.sub("Comparison with existing work")
+    b.p("{tab:compare} places our results next to published studies. "
         "Scores above 0.8 mostly come from one hospital or from random splits of pooled data. On truly "
         "independent hospitals the published range is about 0.54-0.73. On the same external dataset (Lung3) our "
-        "locked result of 0.686 is higher than the 0.60 of Chaunzwa *et al.*, while Song *et al.* report 0.80 on "
+        "locked result of 0.686 is higher than the 0.60 of Chaunzwa *et al., while Song et al.* report 0.80 on "
         "Lung3 and 0.82 on TCGA. Their numbers were obtained with expert tumour masks, by choosing the best of 130 "
         "models on the test sets, and with hospitals mixed randomly in training, so the two results were produced "
         "under different rules.")
@@ -786,23 +812,23 @@ def CONTENT(b):
         ["Chaunzwa 2021 {cite:chaunzwa2021}", "311 pts, 1 hospital", "external Lung3 (49 pts)", "0.71 to 0.60", "deep CNN"],
         ["Chen 2023 {cite:chen2023}", "402 pts, TCIA", "external test (78 pts)", "0.84 to 0.73", "multi-task CNN"],
         ["Song 2023 {cite:song2023}", "868 pts, 8 TCIA sets", "internal + TCGA (97) + Lung3 (71)", "0.82 / 0.82 / 0.80", "best of 130 models, expert masks"],
-        ["**This work**", "1041 pts, 4 hospitals", "site-balanced CV, LOSO, 2 locked tests", "0.72 / 0.71 / 0.69 / 0.59",
+        ["This work", "1041 pts, 4 hospitals", "site-balanced CV, LOSO, 2 locked tests", "0.72 / 0.71 / 0.69 / 0.59",
          "fair metric, automatic masks, pre-registered"],
     ], "Comparison with existing ADC/SCC studies (internal to external where two numbers are given)", "compare",
-        widths=[1.25, 1.25, 1.35, 1.0, 1.35], size=8.5, shade_rows=[6])
+        widths=[1.25, 1.25, 1.35, 1.0, 1.35], size=8.5)
 
     b.h3("Interpretation and Conclusions on Data")
     b.bullets([
-        "**Pooled AUC can be misleading.** In multi-hospital ADC/SCC data, the hospital alone explains a pooled AUC "
+        "Pooled AUC can be misleading. In multi-hospital ADC/SCC data, the hospital alone explains a pooled AUC "
         "of about 0.71. Any multi-centre result should be checked with a site-balanced metric or per-hospital AUCs.",
-        "**There is real CT signal.** Under the fair metric the model reaches 0.722, keeps 0.714 on unseen "
+        "There is real CT signal. Under the fair metric the model reaches 0.722, keeps 0.714 on unseen "
         "hospitals and 0.686 on the locked Lung3 test. The signal comes mainly from tumour position, size and the "
         "texture of the tumour border, which agrees with known clinical tendencies.",
-        "**Harmonisation makes results trustworthy rather than higher.** ComBat removed most of the scanner "
+        "Harmonisation makes results trustworthy rather than higher. ComBat removed most of the scanner "
         "fingerprint while leaving the AUC almost unchanged.",
-        "**Data diversity mattered more than model complexity.** Adding hospitals and improving masks helped; "
+        "Data diversity mattered more than model complexity. Adding hospitals and improving masks helped; "
         "attention, CNNs, foundation models and adversarial training did not.",
-        "**Slice thickness is the main limit.** Texture learned mostly on thin CT does not transfer to 5 mm CT, "
+        "Slice thickness is the main limit. Texture learned mostly on thin CT does not transfer to 5 mm CT, "
         "which explains most of the external drop. The model should be used only on thin-slice CT.",
     ])
 
@@ -842,28 +868,33 @@ def CONTENT(b):
         "patient data protection rules when used on hospital data.")
 
     b.h2("Sustainability Evaluation (PO(g))")
-    b.p("**Technical sustainability.** All configurations, random seeds, splits, feature names and package "
-        "versions are saved, extraction is resumable, and every experiment can be rerun from saved features. The "
-        "model is small and can be retrained in minutes when a new hospital joins. **Economic sustainability.** "
-        "The pipeline uses free, open-source software and runs on a mid-range laptop, so a hospital would need no "
-        "special hardware (Section 8). **Environmental sustainability.** Energy use is low (a few kWh for the whole "
-        "project) because we avoided training large networks and reused public data. **Long-term use.** New "
-        "hospitals can be added without their labels through label-free ComBat mapping, and the locked-test "
+    b.sub("Technical sustainability")
+    b.p("All configurations, random seeds, splits, feature names and package versions are saved, extraction is "
+        "resumable, and every experiment can be rerun from saved features. The model is small and can be retrained "
+        "in minutes when a new hospital joins.")
+    b.sub("Economic sustainability")
+    b.p("The pipeline uses free, open-source software and runs on a mid-range laptop, so a hospital would need no "
+        "special hardware (Section 8).")
+    b.sub("Environmental sustainability")
+    b.p("Energy use is low (about 10-15 kWh for the whole project) because we avoided training large networks and "
+        "reused public data.")
+    b.sub("Long-term use")
+    b.p("New hospitals can be added without their labels through label-free ComBat mapping, and the locked-test "
         "protocol can be repeated each time the model is updated.")
 
     b.h2("Ethical Issues (PO(h))")
     b.p("We applied the following ethical principles:")
     b.bullets([
-        "**Privacy:** only de-identified public data were used; no attempt was made to identify any patient, and "
+        "Privacy: only de-identified public data were used; no attempt was made to identify any patient, and "
         "data were stored locally and not redistributed.",
-        "**Honest evaluation:** every fitted step was kept inside the training folds, the external tests were "
+        "Honest evaluation: every fitted step was kept inside the training folds, the external tests were "
         "pre-registered, frozen with a SHA-256 hash and scored once, and post hoc analyses are clearly labelled.",
-        "**Reporting negative results:** failed approaches (attention-MIL, foundation models, adversarial "
+        "Reporting negative results: failed approaches (attention-MIL, foundation models, adversarial "
         "fine-tuning) and the weak TCGA result are reported in full rather than hidden.",
-        "**Fairness:** the site-balanced metric gives every hospital equal weight, and per-hospital results are "
+        "Fairness: the site-balanced metric gives every hospital equal weight, and per-hospital results are "
         "shown so that weak performance in one group is visible.",
-        "**No overclaiming:** the model is presented as research decision support, not as a diagnostic device.",
-        "**Credit:** all datasets, tools and published methods are cited.",
+        "No overclaiming: the model is presented as research decision support, not as a diagnostic device.",
+        "Credit: all datasets, tools and published methods are cited.",
     ])
     b.p("One ethical challenge was the temptation to adjust the model after seeing the first external result "
         "(TCGA). We did not change the model; instead the second test (Lung3) was pre-registered with the same "
@@ -914,7 +945,7 @@ def CONTENT(b):
     # ------------------------------------------------------------ communication
     b.h1("Communication to External Stakeholders (PO(j))")
     b.h2("Executive Summary")
-    b.p("*Can a CT scan tell which type of lung cancer a patient has?* A BUET student project has built a "
+    b.p("Can a CT scan tell which type of lung cancer a patient has? A BUET student project has built a "
         "computer program that reads a routine chest CT scan and estimates whether a lung tumour is "
         "adenocarcinoma or squamous cell carcinoma, the two main types, which are treated differently. The program "
         "finds and outlines the tumour by itself, measures its position and the texture around it, and removes "
@@ -925,26 +956,25 @@ def CONTENT(b):
     b.p("The steps below run the frozen model on a new CT scan. Commands are run from the project folder with the "
         "Python environments described in Section 4.")
     b.bullets([
-        "**Install.** Create the three environments (main, MedSAM2, TotalSegmentator) from the saved requirement "
-        "files, and download the MedSAM2 checkpoint (it is loaded with `weights_only=True`).",
-        "**Prepare the scan.** Put each patient's CT DICOM series in its own folder. The scan should be a "
+        "Install. Create the three environments (main, MedSAM2, TotalSegmentator) from the saved requirement "
+        "files, and download the MedSAM2 checkpoint.",
+        "Prepare the scan. Put each patient's CT DICOM series in its own folder. The scan should be a "
         "pre-treatment chest CT, preferably with slices of 2.5 mm or thinner.",
-        "**Convert and resample.** Run the build script to convert DICOM to NIfTI and resample to 2 mm.",
-        "**Find the tumour.** Run the detection script (TotalSegmentator lung nodules). Check the detected box on "
+        "Convert and resample. Run the build script to convert DICOM to NIfTI and resample to 2 mm.",
+        "Find the tumour. Run the detection script (TotalSegmentator lung nodules). Check the detected box on "
         "the saved preview image; if the wrong nodule was chosen, replace the box by hand.",
-        "**Outline the tumour.** Run the MedSAM2 script with the saved settings; it writes one mask per patient.",
-        "**Extract features.** Run the feature script for radiomics (shells) and position; age and sex are read "
+        "Outline the tumour. Run the MedSAM2 script with the saved settings; it writes one mask per patient.",
+        "Extract features. Run the feature script for radiomics (shells) and position; age and sex are read "
         "from the DICOM header.",
-        "**Predict.** Run the prediction script. It fits the frozen model on the 1041 development patients, maps "
+        "Predict. Run the prediction script. It fits the frozen model on the 1041 development patients, maps "
         "the new scans as a new site with label-free ComBat, and writes one score per patient.",
-        "**Read the result.** A score above 0 suggests ADC and below 0 suggests SCC; values near 0 are uncertain. "
+        "Read the result. A score above 0 suggests ADC and below 0 suggests SCC; values near 0 are uncertain. "
         "The result must be interpreted by a doctor together with other clinical information.",
     ], numbered=True)
     b.h2("Github Link")
-    b.p("The complete source code, configuration files and documentation are kept in the project repository "
-        "(folder `ADC_SCC_MIL`, sub-folders `src`, `config`, `reports` and `docs`). The core code is listed in "
-        "Section 3.7.")
-    b.p("Repository: https://github.com/<to-be-added>/ADC_SCC_CT", align="left")
+    b.p("The complete source code, configuration files, documentation, this report and the presentation slides "
+        "are available in the GitHub repository below. The core parts of the code are also listed in Section 3.7.")
+    b.p("https://github.com/raahiibbb/ADC-SCC-CT-Radiomics", align="left", human=False)
 
     # ------------------------------------------------------------ management
     b.h1("Project Management and Cost Analysis (PO(k))")
@@ -981,17 +1011,17 @@ def CONTENT(b):
     b.h1("Future Work (PO(l))")
     b.p("The project is finished, but the results point to clear next steps:")
     b.bullets([
-        "**Robustness to thick slices.** Train with thin scans artificially blurred to 5 mm, or use features that "
+        "Robustness to thick slices. Train with thin scans artificially blurred to 5 mm, or use features that "
         "are less sensitive to slice thickness, since 5 mm CT was the main failure mode.",
-        "**Larger external test.** Test on a multi-hospital dataset in which every hospital has both ADC and SCC, "
+        "Larger external test. Test on a multi-hospital dataset in which every hospital has both ADC and SCC, "
         "so that per-hospital AUCs can be computed, ideally including Bangladeshi hospitals.",
-        "**Human check of the detected nodule.** A short radiologist confirmation of the automatic box would "
+        "Human check of the detected nodule. A short radiologist confirmation of the automatic box would "
         "remove most of the wrong-lesion errors (about 1 in 5).",
-        "**PET and clinical data.** Adding PET uptake and smoking history, where available, may add information "
+        "PET and clinical data. Adding PET uptake and smoking history, where available, may add information "
         "that CT texture does not contain.",
-        "**Better use of deep models.** Foundation models could be revisited with harmonisation built into "
+        "Better use of deep models. Foundation models could be revisited with harmonisation built into "
         "training, or with much larger multi-hospital data.",
-        "**Prospective evaluation.** Before any clinical use, the frozen model should be tested prospectively on "
+        "Prospective evaluation. Before any clinical use, the frozen model should be tested prospectively on "
         "new patients with the same locked protocol.",
     ])
 

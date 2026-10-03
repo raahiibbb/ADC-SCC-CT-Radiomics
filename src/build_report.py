@@ -29,6 +29,8 @@ ROOT = os.path.dirname(HERE)
 TPL = r"D:\User\Downloads\EEE-xxx-project-report-template.docx"
 OUT = os.path.join(ROOT, "report", "Group_13_EEE_402_G2_Project_Report.docx")
 FIG = os.path.join(ROOT, "report", "figures")
+EXPORT = os.path.join(ROOT, "report", "report_text_for_quillbot.txt")     # written on every build
+HUMAN = os.path.join(ROOT, "report", "report_text_humanized.txt")         # used if present
 PFIG = os.path.join(ROOT, "presentation", "figures")
 XSL = etree.XSLT(etree.parse(r"C:\Program Files\Microsoft Office\root\Office16\MML2OMML.XSL"))
 
@@ -110,11 +112,30 @@ class Numbers:
 
 # ====================================================================== builder
 class Builder:
-    def __init__(self, doc, nums, dry):
+    def __init__(self, doc, nums, dry, overrides=None):
         self.doc, self.n, self.dry = doc, nums, dry
         self.body = doc.element.body
         self.nfig = self.ntab = self.neq = 0
         self.num_id = None
+        self.uid = 0                     # running id of prose units (paragraphs, bullets, captions)
+        self.units = []                  # (uid, resolved original text) for the QuillBot export
+        self.overrides = overrides or {}  # uid -> humanized plain text
+        self.rejected = []
+
+    # ------------------------------------------------- humanized text units
+    def _unit(self, text):
+        """resolved text of one prose unit, replaced by its humanized version if one is available."""
+        self.uid += 1
+        orig = self.n.resolve(text)
+        self.units.append((self.uid, orig))
+        new = self.overrides.get(self.uid)
+        if new is None:
+            return orig
+        ok, merged = merge_human(orig, new)
+        if not ok:
+            self.rejected.append((self.uid, merged))
+            return orig
+        return merged
 
     # ---------------------------------------------------------------- text
     def _rich(self, p, text, size=None, bold=False, italic=False, font=None):
@@ -163,10 +184,23 @@ class Builder:
         if not self.dry:
             self.doc.add_paragraph(t, style="Heading 3")
 
-    def p(self, text, align="justify", after=6, before=0, italic=False, keep=False, size=None):
+    def sub(self, title):
+        """small plain sub-heading on its own line (not numbered, not in the TOC)."""
+        if self.dry:
+            return
+        p = self._para()
+        p.paragraph_format.space_before = Pt(6)
+        p.paragraph_format.space_after = Pt(2)
+        p.paragraph_format.keep_with_next = True
+        r = p.add_run(title)
+        r.bold = True
+
+    def p(self, text, align="justify", after=6, before=0, italic=False, keep=False, size=None, human=True):
         if self.dry:
             self.n.resolve(text)
             return
+        if human:
+            text = self._unit(text)
         p = self._para()
         p.alignment = {"justify": WD_ALIGN_PARAGRAPH.JUSTIFY, "center": WD_ALIGN_PARAGRAPH.CENTER,
                        "left": WD_ALIGN_PARAGRAPH.LEFT}[align]
@@ -202,7 +236,7 @@ class Builder:
             numPr.append(il)
             numPr.append(ni)
             pPr.insert(0, numPr) if pPr.find(qn("w:pStyle")) is None else pPr.find(qn("w:pStyle")).addnext(numPr)
-            self._rich(p, it)
+            self._rich(p, self._unit(it))
 
     def _new_numbering(self):
         numbering = self.doc.part.numbering_part.element
@@ -260,13 +294,13 @@ class Builder:
         p.paragraph_format.keep_with_next = True
         p.add_run().add_picture(full, width=Inches(width))
         c = self._para("Caption")
-        self._rich(c, f"Figure {self.nfig}: {caption}")
+        self._rich(c, f"Figure {self.nfig}: " + self._unit(caption))
 
     # --------------------------------------------------------------- tables
-    def _cap_table(self, caption):
+    def _cap_table(self, caption, human=True):
         c = self._para("Caption")
         c.paragraph_format.space_before = Pt(4)
-        self._rich(c, f"Table {self.ntab}: {caption}")
+        self._rich(c, f"Table {self.ntab}: " + (self._unit(caption) if human else caption))
 
     def table(self, header, rows, caption, label, widths=None, size=9.5, align=None, bold_last=False,
               shade_rows=None):
@@ -332,7 +366,7 @@ class Builder:
                 r._element.rPr.rFonts.set(qn("w:eastAsia"), "Consolas")
                 r._element.rPr.rFonts.set(qn("w:cs"), "Consolas")
                 r.font.size = Pt(7)
-        self._cap_table(caption)
+        self._cap_table(caption, human=False)
 
     def logbook(self, rows, caption, label):
         """reuse the template's log-book table (header + one row)."""
@@ -365,22 +399,9 @@ class Builder:
         self._cap_table(caption)
 
     def abstract(self, paras):
-        if self.dry:
-            return
-        el = copy.deepcopy(self.proto_abs)
-        self.body.find(qn("w:sectPr")).addprevious(el)
-        t = Table(el, self.doc._body)
-        cell = t.cell(0, 0)
-        for extra in cell.paragraphs[1:]:
-            extra._p.getparent().remove(extra._p)
-        cp = cell.paragraphs[0]
-        for r in list(cp.runs):
-            r._r.getparent().remove(r._r)
-        for k, txt in enumerate(paras):
-            q = cp if k == 0 else cell.add_paragraph()
-            q.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-            q.paragraph_format.space_after = Pt(6)
-            self._rich(q, txt)
+        """plain justified paragraphs (no shaded box); the keyword line is not humanized."""
+        for txt in paras:
+            self.p(txt, human=not txt.startswith("**Keywords:**"))
 
     def page_break(self):
         if not self.dry:
@@ -399,6 +420,58 @@ class Builder:
             p.paragraph_format.tab_stops.add_tab_stop(Inches(0.4))
             r = p.add_run(f"[{num}]\t")
             self._rich(p, REFS[key])
+
+
+# ============================================================ QuillBot round trip
+MATH = re.compile(r"\$[^$]+\$")
+TOKEN = re.compile(r"\[\s*M\s*(\d+)\s*\]")
+NUMBER = re.compile(r"\d+(?:[.,]\d+)*")
+
+
+def plain_for_export(text):
+    """resolved unit -> plain text: inline math becomes [M1], [M2]...; markup removed."""
+    k = [0]
+
+    def tok(_):
+        k[0] += 1
+        return f"[M{k[0]}]"
+    out = MATH.sub(tok, text)
+    out = re.sub(r"\*\*([^*]+)\*\*", r"\1", out)
+    out = re.sub(r"\*([^*]+)\*", r"\1", out)
+    return out.replace("`", "")
+
+
+def merge_human(orig, new):
+    """put the original inline math back into a humanized unit and check that nothing was lost.
+    Returns (ok, text or reason)."""
+    maths = MATH.findall(orig)
+    new = " ".join(new.split())
+    found = [int(x) for x in TOKEN.findall(new)]
+    if sorted(found) != list(range(1, len(maths) + 1)):
+        return False, f"math tokens {found} instead of 1..{len(maths)}"
+    plain_orig = MATH.sub(" ", orig)
+    plain_new = TOKEN.sub(" ", new)
+    nums = lambda s: {n.replace(",", "") for n in NUMBER.findall(s)}  # noqa: E731  (1,041 == 1041)
+    lost = sorted(nums(plain_orig) - nums(plain_new))
+    if lost:
+        return False, f"numbers missing: {lost}"
+    out = TOKEN.sub(lambda m: maths[int(m.group(1)) - 1], new)
+    out = re.sub(r"\bet al\.", "*et al.*", out)
+    return True, out
+
+
+def read_humanized(path):
+    if not os.path.isfile(path):
+        return {}
+    txt = open(path, encoding="utf8").read()
+    parts = re.split(r"\[\s*P\s*0*(\d+)\s*\]", txt)
+    return {int(parts[i]): parts[i + 1].strip() for i in range(1, len(parts) - 1, 2) if parts[i + 1].strip()}
+
+
+def write_export(units, path):
+    with open(path, "w", encoding="utf8") as f:
+        for uid, text in units:
+            f.write(f"[P{uid:03d}]\n{plain_for_export(text)}\n\n")
 
 
 # ================================================================ cover + frame
@@ -480,10 +553,21 @@ def main():
     edit_footers(doc)
 
     nums = Numbers()
+    overrides = read_humanized(HUMAN)
     for dry in (True, False):
-        b = Builder(doc, nums, dry)
+        b = Builder(doc, nums, dry, overrides)
         b.proto_abs, b.proto_log = proto_abs, proto_log
         CONTENT(b)
+    write_export(b.units, EXPORT)
+    print(f"prose units: {len(b.units)} -> {EXPORT}")
+    if overrides:
+        used = len([u for u, _ in b.units if u in overrides]) - len(b.rejected)
+        print(f"humanized text applied to {used} of {len(b.units)} units")
+        for uid, why in b.rejected:
+            print(f"  [P{uid:03d}] kept original: {why}")
+        extra = sorted(set(overrides) - {u for u, _ in b.units})
+        if extra:
+            print("  unknown ids in humanized file:", extra)
     # sanity: every reference key exists, no unresolved labels
     missing = [k for k in nums.ref if k not in REFS]
     assert not missing, missing
