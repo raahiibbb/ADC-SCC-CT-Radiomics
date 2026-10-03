@@ -1,0 +1,93 @@
+# ===========================================================================
+# Phase 10 - prevalence-aware harmonisation + confound-aware evaluation
+#            for multi-centre CT ADC-vs-SCC classification.
+#
+# Authorised by explicit user decision on 2026-09-25/26 (lifts the Phase-8B/9A
+# bans on ComBat / harmonisation / SVM / boosting / clinical covariates /
+# foundation-model features for THIS phase only).  Phases 1-9A stay frozen and
+# untouched; every Phase-10 artefact lives under a *phase10* path.
+#
+# Cohort = the 343-patient Phase-8B multicentre cohort (LUNG1 202 + Radio-
+# genomics 141).  NO number from this phase is independent external
+# validation; leave-one-site-out transport is the strongest claim.
+#
+# Every scientific parameter lives here.  Nothing scientific is hard-coded.
+# ===========================================================================
+
+experiment:
+  name: phase10_prevalence_aware_harmonisation
+  phase: 10
+  positive_class: adenocarcinoma      # ADC = 1, SCC = 0
+  seeds: [42, 43, 44, 45, 46]         # 5 x repeated stratified 5-fold CV
+  n_outer_folds: 5
+  n_inner_folds: 3
+  strata: site_x_label                # every fold keeps all four strata
+
+paths:
+  cohort_csv: cohort/phase8b_multicenter_cohort.csv          # read only
+  lung1_gtv_csv: global_features/phase7a/gtv.csv             # read only
+  lung1_rim_csv: global_features/phase7a/rim.csv             # read only
+  external_gtv_csv: external/nsclc_radiogenomics/global_features/gtv.csv
+  external_rim_csv: external/nsclc_radiogenomics/global_features/rim.csv
+  lung1_clinical_csv: "E:/Thesis/Datasets/L.U.N.G/1/NSCLC-Radiomics-Lung1.clinical-version3-Oct-2019.csv"
+  external_clinical_csv: "E:/Thesis/Datasets/L.U.N.G/2/NSCLCR01Radiogenomic_DATA_LABELS_2018-05-22_1500-shifted.csv"
+  lung1_image_root: "D:/User/Documents/L.U.N.G/Vuong5ROI/outputs/full_cohort"   # read only
+  external_image_root: external/nsclc_radiogenomics/masks                      # read only
+  # Phase-10-owned outputs
+  extra_features_dir: global_features/phase10
+  results_dir: results/phase10
+  log_dir: logs
+
+# ---- harmonisation (fitted on the TRAINING partition only) ----------------
+harmonisation:
+  methods: [none, combat, balanced_combat]
+  empirical_bayes: true
+  # leave-one-site-out: the destination site has no labels; balanced ComBat
+  # estimates its location/scale by EM over the source model's posteriors.
+  em_iterations: 10
+  em_tolerance: 1.0e-4
+
+# ---- feature handling (training partition only) ---------------------------
+features:
+  drop_near_constant_std: 1.0e-8
+  # univariate ranking = site-balanced |AUC - 0.5| on the training partition
+  top_k_grid: [10, 25, 50]
+  correlation_prune: 0.90
+  # optional acquisition filter: drop features whose WITHIN-CLASS site AUC
+  # (after harmonisation) exceeds this value on the training partition
+  site_filter_auc: 0.80
+
+# ---- models (hyper-parameters chosen by inner CV on site-balanced AUC) -----
+models:
+  logreg:
+    C_grid: [0.01, 0.1, 1.0]
+  svm:
+    C_grid: [0.1, 1.0, 10.0]
+    gamma: scale
+  lgbm:
+    n_estimators: 200
+    learning_rate: 0.03
+    num_leaves_grid: [4, 8]
+    min_child_samples: 10
+    subsample: 0.8
+    colsample_bytree: 0.5
+  # dense L2 logistic on EVERY feature (no selection) - added after the first
+  # FMCIB run showed top-k selection discards distributed deep-feature signal
+  ridge_all:
+    C_grid: [0.0001, 0.0003, 0.001, 0.003, 0.01]
+  ensemble: z_mean             # mean of training-standardised model scores
+
+# ---- evaluation ------------------------------------------------------------
+evaluation:
+  # PRIMARY: site-balanced ROC-AUC.  Sample weight 1/(4 n_{site,label}) makes
+  # every site count equally and each site 50/50, so a predictor that only
+  # knows the site scores exactly 0.5.
+  primary_metric: site_balanced_auc
+  bootstrap_resamples: 2000
+  bootstrap_seed: 42
+
+# ---- leave-one-site-out transport -------------------------------------------
+transport:
+  # prevalence-informed ComBat uses ONE number per destination site (its ADC
+  # share).  Robustness: the same mapping with that number wrong by +/- this.
+  prior_misspecification: 0.15

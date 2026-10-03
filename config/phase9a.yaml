@@ -1,0 +1,255 @@
+# ===========================================================================
+# Phase 9A - third-cohort feasibility, selection and reservation.
+#
+# PURPOSE.  Audit candidate PUBLIC cohorts for use as a genuinely untouched
+# THIRD cohort, reserved for ONE-SHOT external validation.
+#
+# HARD RULES, enforced by tests/test_phase9a.py and by
+# docs/PHASE9_EXTERNAL_RESERVATION_PROTOCOL.md:
+#   * Phase 9A trains NO model and computes NO ADC/SCC classification metric.
+#   * No candidate cohort is used to choose features, preprocessing, filters,
+#     harmonisation, architecture or any modelling decision.
+#   * No candidate is preferred because its imaging looks favourable.
+#   * No automated tumour segmentation is implemented, downloaded or run.
+#   * No Phase-1..8B artefact is modified.  Dataset/ and Vuong5ROI/ read-only.
+#   * Phase 9B is NOT authorised by this config and no code for it exists.
+#
+# Every scientific parameter lives in this file.  Nothing scientific is
+# hard-coded in src/phase9a_audit.py.
+# ===========================================================================
+
+experiment:
+  name: phase9a_third_cohort_feasibility
+  phase: 9A
+  authorised_scope: [collection_metadata, segmentation_availability,
+                     independence_audit, provenance, feasibility_table,
+                     pilot_technical_qa]
+  forbidden_scope: [classification_metrics, model_training, model_selection,
+                    feature_extraction_on_candidates, feature_selection,
+                    combat, harmonisation, automated_segmentation,
+                    phase8c, phase9b]
+
+# Evidence-based per-candidate assessment (segmentation codes, provenance,
+# independence, feasibility).  Kept in its own file for readability; it is
+# configuration, not code.
+assessment_config: config/phase9a_assessment.yaml
+
+protocol:
+  path: docs/PHASE9_EXTERNAL_RESERVATION_PROTOCOL.md
+  # Frozen and hashed BEFORE any candidate-specific metadata query.
+  sha256: "94bd5e552662ba629f3b5eec24fa6cc05834e15fda11b2dc32ff3802eca875f0"
+
+# ---------------------------------------------------------------------------
+# SOURCE - official TCIA metadata.  Read-only public API.
+# ---------------------------------------------------------------------------
+source:
+  nbia_api: "https://services.cancerimagingarchive.net/nbia-api/services/v1"
+  user_agent: "ADC-SCC-MIL/phase9a"
+  download:
+    timeout_s: 300
+    retries: 3
+    retry_sleep_s: 5
+
+# ---------------------------------------------------------------------------
+# DEVELOPMENT COHORTS - spent.  Never again an external test (protocol 1.1).
+# Audited here ONLY as the reference side of the overlap comparison.
+# ---------------------------------------------------------------------------
+development_cohorts:
+  - key: LUNG1
+    tcia_collection: "NSCLC-Radiomics"
+    doi: "https://doi.org/10.7937/K9/TCIA.2015.PF0M9REI"
+    institution: "MAASTRO Clinic / Maastricht University Medical Centre (NL)"
+    eligible_adc: 51
+    eligible_scc: 151
+    consumed_by: "Phases 1-8B"
+  - key: RADIOGENOMICS
+    tcia_collection: "NSCLC Radiogenomics"
+    doi: "https://doi.org/10.7937/K9/TCIA.2017.7hs46erv"
+    institution: "Stanford University School of Medicine + Palo Alto VA (USA)"
+    eligible_adc: 112
+    eligible_scc: 29
+    consumed_by: "Phase 8B (untouched-external status deliberately retired)"
+
+# ---------------------------------------------------------------------------
+# CANDIDATES.  The four named in the Phase-9A instruction, plus every other
+# TCIA thoracic-CT lung collection discovered from the official collection
+# listing that could plausibly carry ADC/SCC histology.
+#
+# `literature_context` is CONTEXT ONLY.  It is never an acceptance criterion
+# and no check asserts it.  Counts that matter are labelled by their source in
+# the report.
+# ---------------------------------------------------------------------------
+candidates:
+  - key: TCGA_LUAD_LUSC
+    label: "TCGA-LUAD + TCGA-LUSC"
+    tcia_collections: ["TCGA-LUAD", "TCGA-LUSC"]
+    dois: ["https://doi.org/10.7937/K9/TCIA.2016.JGNIHEP5",
+           "https://doi.org/10.7937/K9/TCIA.2016.TYGKKFMQ"]
+    institution: "Barnes-Jewish/WashU, Univ. Pittsburgh UPMC, UNC, Lahey (USA)"
+    literature_context:
+      source: "Song et al. 2023, Table 1"
+      adc: 63
+      scc: 34
+      total: 97
+      note: "context only - never an acceptance criterion"
+
+  - key: LUNG3
+    label: "NSCLC-Radiomics-Genomics (Lung3)"
+    tcia_collections: ["NSCLC-Radiomics-Genomics"]
+    dois: ["https://doi.org/10.7937/K9/TCIA.2015.L4FRET6Z"]
+    institution: "MAASTRO Clinic (NL)"
+    literature_context:
+      source: "Song et al. 2023, Table 1"
+      adc: 41
+      scc: 30
+      total: 71
+      note: "context only - never an acceptance criterion"
+
+  - key: LUNG_PET_CT_DX
+    label: "Lung-PET-CT-Dx"
+    tcia_collections: ["Lung-PET-CT-Dx"]
+    dois: ["https://doi.org/10.7937/TCIA.2020.NNC2-0461"]
+    institution: "Second Affiliated Hospital of Harbin Medical University (CN)"
+    literature_context:
+      source: "Song et al. 2023, Table 1"
+      adc: 216
+      scc: 49
+      total: 265
+      note: "context only - never an acceptance criterion"
+
+  - key: INTEROBSERVER1
+    label: "NSCLC-Radiomics-Interobserver1"
+    tcia_collections: ["NSCLC-Radiomics-Interobserver1"]
+    dois: ["https://doi.org/10.7937/tcia.2019.cwvlpd26"]
+    institution: "Maastricht University Medical Centre + / MAASTRO (NL)"
+    literature_context:
+      source: "Song et al. 2023, Table 1"
+      adc: 10
+      scc: 6
+      total: 16
+      note: "context only - never an acceptance criterion"
+
+  - key: LUNGCT_DIAGNOSIS
+    label: "LungCT-Diagnosis"
+    tcia_collections: ["LungCT-Diagnosis"]
+    dois: ["https://doi.org/10.7937/K9/TCIA.2015.A6V7JIWX"]
+    institution: "Moffitt Cancer Center (USA)"
+    literature_context:
+      source: "Song et al. 2023, Table 1"
+      adc: 61
+      scc: 0
+      total: 61
+      note: "context only - ADC-only in Song's screening; never an acceptance criterion"
+
+  - key: QIN_LUNG_CT
+    label: "QIN LUNG CT"
+    tcia_collections: ["QIN LUNG CT"]
+    dois: ["https://doi.org/10.7937/K9/TCIA.2015.NPGZYZBZ"]
+    institution: "Moffitt Cancer Center (USA)"
+    literature_context: {source: "not used by the supplied papers", note: "discovered from the official TCIA collection listing"}
+
+  - key: SPIE_AAPM
+    label: "SPIE-AAPM Lung CT Challenge"
+    tcia_collections: ["SPIE-AAPM Lung CT Challenge"]
+    dois: ["https://doi.org/10.7937/K9/TCIA.2015.UZLSU3FL"]
+    institution: "SPIE / AAPM / NCI challenge (multi-source)"
+    literature_context: {source: "not used by the supplied papers", note: "discovered from the official TCIA collection listing"}
+
+  - key: ANTI_PD1_LUNG
+    label: "Anti-PD-1_Lung"
+    tcia_collections: ["Anti-PD-1_Lung"]
+    dois: ["https://doi.org/10.7937/TCIA.2019.ZJJWB9IP"]
+    institution: "Dana-Farber / Brigham and Women's (USA)"
+    literature_context: {source: "not used by the supplied papers", note: "discovered from the official TCIA collection listing"}
+
+  - key: ACRIN_NSCLC_FDG_PET
+    label: "ACRIN-NSCLC-FDG-PET"
+    tcia_collections: ["ACRIN-NSCLC-FDG-PET"]
+    dois: ["https://doi.org/10.7937/TCIA.2019.30ILQFCL"]
+    institution: "ACRIN 6668 multi-centre trial (USA)"
+    literature_context: {source: "not used by the supplied papers", note: "discovered from the official TCIA collection listing"}
+
+  - key: LUNG_FUSED_CT_PATHOLOGY
+    label: "Lung-Fused-CT-Pathology"
+    tcia_collections: ["Lung-Fused-CT-Pathology"]
+    dois: ["https://doi.org/10.7937/TCIA.2018.T3DPFTKB"]
+    institution: "Case Western Reserve University (USA)"
+    literature_context: {source: "not used by the supplied papers", note: "discovered from the official TCIA collection listing"}
+
+  - key: FOUR_D_LUNG
+    label: "4D-Lung"
+    tcia_collections: ["4D-Lung"]
+    dois: ["https://doi.org/10.7937/K9/TCIA.2016.ELN8YGLE"]
+    institution: "University of Texas MD Anderson / Univ. of Iowa (USA)"
+    literature_context: {source: "not used by the supplied papers", note: "discovered from the official TCIA collection listing"}
+
+  - key: RIDER_LUNG_CT
+    label: "RIDER Lung CT"
+    tcia_collections: ["RIDER Lung CT"]
+    dois: ["https://doi.org/10.7937/K9/TCIA.2015.U1X8A5NR"]
+    institution: "Memorial Sloan Kettering (USA)"
+    literature_context: {source: "not used by the supplied papers", note: "test-retest collection; discovered from the official TCIA collection listing"}
+
+# ---------------------------------------------------------------------------
+# ELIGIBILITY THRESHOLDS - protocol section 2.1.  Frozen before the audit.
+# ---------------------------------------------------------------------------
+eligibility:
+  primary_external_test:
+    min_total_adc_scc: 60
+    min_minority_class: 20
+  secondary_robustness_only_if_below: true
+
+# ---------------------------------------------------------------------------
+# SEGMENTATION CODES - protocol section 3.  Assigned from evidence, never
+# softened, and never replaced by an automated model in Phase 9A.
+# ---------------------------------------------------------------------------
+segmentation_codes:
+  A: "public collection itself contains usable primary-tumour segmentations"
+  B: "an official TCIA Analysis Result provides them"
+  C: "the literature segmented them manually; masks not public"
+  D: "only bounding boxes / tumour location annotations exist"
+  E: "no tumour localisation of any kind"
+
+# DICOM modalities that can carry a reusable 3D primary-tumour segmentation.
+segmentation_modalities: ["SEG", "RTSTRUCT"]
+
+# ---------------------------------------------------------------------------
+# INDEPENDENCE AUDIT - protocol section 4.  Evidence rank 1 is the strongest.
+# ---------------------------------------------------------------------------
+independence:
+  evidence_ranks:
+    1: "disjoint PatientIDs AND disjoint StudyInstanceUIDs from official TCIA metadata"
+    2: "disjoint PatientIDs from official TCIA metadata"
+    3: "different contributing institution documented by TCIA or the source paper"
+    4: "a published statement of non-duplication"
+    5: "assumption - never sufficient on its own"
+  # A shared institution is an independence DEFECT even when patients are
+  # disjoint (protocol section 4.1).
+  same_centre_as_development_is_a_defect: true
+  development_institutions_to_flag: ["MAASTRO", "Maastricht"]
+
+# ---------------------------------------------------------------------------
+# PILOT - protocol section 6.  Only for a candidate already satisfying the
+# size rule AND carrying code A or B segmentation.
+# ---------------------------------------------------------------------------
+pilot:
+  enabled: true
+  n_patients_min: 3
+  n_patients_max: 5
+  # Deterministic, label-blind, image-blind.  Recorded BEFORE download.
+  selection_rule: "first N PatientIDs in ascending lexical order among subjects carrying both a CT series and a segmentation series"
+  checks: [dicom_readable, segmentation_readable, ct_mask_geometry,
+           subject_series_mapping]
+  forbidden: [disease_radiomics, adc_scc_performance,
+              image_statistic_comparison_against_project_cohorts]
+
+# ---------------------------------------------------------------------------
+# OUTPUTS
+# ---------------------------------------------------------------------------
+paths:
+  audit_dir: external/phase9_candidate_audit
+  candidate_table: reports/phase9a_candidate_table.csv
+  run_record: reports/phase9a_run.json
+  tests_record: reports/phase9a_tests.json
+  report: reports/PHASE9A_REPORT.md
+  log: logs/phase9a.log

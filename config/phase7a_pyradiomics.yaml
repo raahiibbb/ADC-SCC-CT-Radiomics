@@ -1,0 +1,75 @@
+# ---------------------------------------------------------------------------
+# Phase 7A - PyRadiomics parameter file for WHOLE-REGION (global) extraction.
+#
+# ONE patient contributes exactly ONE feature row per region.  This file is the
+# GTV variant: it enables `shape`.  The RIM extractor is built from THIS SAME
+# file with the single key `featureClass.shape` deleted in code
+# (src/phase7a_extract.py: build_extractor(region)), which is the deterministic
+# implementation of the protocol rule "no rim shape features in the primary
+# protocol".  Nothing else differs between the two regions.
+#
+# The CT and the mask are ALREADY resampled to 2x2x2 mm by the pipeline
+# (CT linear, mask nearest), so `resampledPixelSpacing` is deliberately null -
+# PyRadiomics must not resample a second time.
+#
+# Frozen by docs/PHASE7_PROTOCOL.md.  Do not tune.
+# ---------------------------------------------------------------------------
+
+imageType:
+  Original: {}
+  # LoG sigma is in MILLIMETRES (PyRadiomics convention), not voxels.
+  LoG:
+    sigma: [2.0, 3.0, 4.0]
+  # ONE decomposition level only -> the 8 standard sub-bands
+  # (LLL LLH LHL LHH HLL HLH HHL HHH).
+  Wavelet:
+    wavelet: coif1          # PyRadiomics default, stated rather than implied
+    level: 1
+    start_level: 0
+
+featureClass:
+  # `shape` is computed by PyRadiomics from the ORIGINAL image only; it never
+  # appears for LoG or wavelet images, which is exactly the protocol rule
+  # "do NOT calculate shape from LoG or wavelet images".
+  shape:
+  firstorder:
+  glcm:
+  glrlm:
+  glszm:
+  gldm:
+  ngtdm:
+
+setting:
+  # --- geometry ---
+  resampledPixelSpacing:            # null: already resampled upstream to 2 mm
+  interpolator: sitkBSpline         # unused (no resampling here)
+  force2D: false
+  # preCrop + a 20 mm pad: the filtered images are computed on the region
+  # bounding box grown by 10 voxels (= 20 mm = 5 sigma at the largest LoG
+  # sigma of 4 mm), which keeps LoG/wavelet edge effects out of the mask while
+  # making whole-thorax filtering tractable.  Frozen; never tuned.
+  preCrop: true
+  padDistance: 10
+  geometryTolerance: 0.0001
+  correctMask: false
+
+  # --- intensity ---
+  normalize: false
+  removeOutliers:
+  resegmentRange: [-1024, 200]
+  resegmentMode: absolute
+  resegmentShape: false
+
+  # --- discretisation ---
+  binWidth: 20
+
+  # --- ROI ---
+  label: 1
+  minimumROIDimensions: 2
+  minimumROISize:
+
+  # --- misc ---
+  additionalInfo: false
+  distances: [1]
+  symmetricalGLCM: true
+  weightingNorm:

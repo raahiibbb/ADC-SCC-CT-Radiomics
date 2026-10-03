@@ -1,0 +1,13 @@
+# Frozen GTV+Rim pilot (Phase 4).  Six patients: 3 ADC / 3 SCC covering the
+# small, medium and large end of the GTVRim_Volume_mm3 distribution.
+#
+# LUNG1-109 and LUNG1-017 are Gradient-EXCLUDED subjects: they exercise the
+# patients that only the GTV+Rim experiment can use.
+# LUNG1-114, LUNG1-140 and LUNG1-153 are also in the Gradient pilot, so the
+# shared physical lattice can be verified directly against the frozen bags.
+LUNG1-109   # ADC, smallest GTV+Rim ROI in the cohort (10 766 mm3), Gradient-excluded
+LUNG1-017   # SCC, smallest SCC GTV+Rim ROI (10 836 mm3), Gradient-excluded
+LUNG1-114   # ADC, median GTV+Rim ROI (137 518 mm3), in the Gradient pilot
+LUNG1-117   # SCC, median SCC GTV+Rim ROI (144 147 mm3)
+LUNG1-140   # ADC, 2nd largest GTV+Rim ROI (870 850 mm3), in the Gradient pilot
+LUNG1-153   # SCC, largest GTV+Rim ROI (896 545 mm3), in the Gradient pilot

@@ -1,0 +1,124 @@
+# Phase 5 - GTV+Rim robust MIL evaluation.
+#
+# Procedure and science are COPIED VERBATIM from config/phase3b.yaml.  The ONLY
+# differences are the input ROI namespace (the frozen 202 GTV+Rim bags and their
+# own frozen outer split) and the project-owned output namespace, so that no
+# Gradient or Phase-3B artefact can be overwritten and the ROI is the only thing
+# that changes between the two experiments.
+#
+# Unchanged from Phase 3B: 74 -> 64 -> 32 encoder, ReLU, dropout 0.2, Adam
+# lr 1e-3 / weight_decay 1e-4, weighted BCE, ADC positive, one patient = one bag
+# = one loss contribution, max 100 epochs for inner CV, stratified 3-fold inner
+# CV over the outer-training patients, epoch = argmax of the mean inner-CV
+# ROC-AUC with the lowest epoch winning ties, final scaler and pos_weight from
+# ALL outer-training patients, from-scratch refit for exactly the selected
+# epoch, one outer-test evaluation, threshold 0.5, no SMOTE.
+
+phase3:
+  name: gtv_rim_mil_p5
+  roi: gtv_rim
+  # frozen, read-only inputs - the Phase-4 products
+  features_dir: patch_features/gtv_rim
+  splits_file: splits/gtv_rim_stratified_5fold.csv
+  splits_meta_file: splits/gtv_rim_stratified_5fold_meta.json
+  feature_names_file: config/feature_names.txt
+  cohort_file: cohort/gtv_rim_cohort.csv
+  expected_patients: 202
+  expected_adc: 51
+  expected_scc: 151
+  expected_features: 74
+  expected_extraction_signature: "9825ed13538ee681"
+
+inner_cv:
+  # stratified K-fold over the OUTER TRAIN patients, used only to choose an epoch
+  n_splits: 3
+  shuffle: true
+  # fold-specific seed = base_seed + outer_fold
+  base_seed: 3000
+  epoch_selection: mean_inner_cv_roc_auc
+  tie_break: lowest_epoch
+
+preprocessing:
+  variance:
+    absolute_std_threshold: 1.0e-8
+    relative_std_threshold: 1.0e-8
+    eps: 1.0e-12
+  standardize: zscore
+
+model:
+  input_dim: 74
+  encoder_hidden: [64, 32]
+  activation: relu
+  dropout: 0.2
+  attention_hidden: 32
+  pooling:
+    mean_mil: mean
+    attention_mil: gated_attention
+
+training:
+  optimizer: adam
+  learning_rate: 1.0e-3
+  weight_decay: 1.0e-4
+  max_epochs: 100
+  bags_per_batch: 1
+  loss: weighted_bce_with_logits
+  pos_weight_source: training_patient_counts   # inner-train during selection, outer-train for the refit
+  device: cpu
+  early_stopping_patience: null                # superseded by inner-CV epoch selection
+
+seeds:
+  python: 42
+  numpy: 42
+  torch: 42
+  inner_base_seed: 4000
+  final_base_seed: 5000
+  deterministic_torch: true
+
+evaluation:
+  threshold: 0.5
+  positive_class: 1
+  small_bag_threshold: 20
+  # Phase 5 only: annotate the small-bag table with paired-subset membership
+  small_bag_annotate_shared: true
+
+# ---------------------------------------------------------------------------
+# Paired ROI comparison against the methodologically sound Gradient Phase-3B
+# out-of-fold predictions.  The two outer splits are INDEPENDENT: fold indices
+# are never aligned and fold differences are never averaged across experiments.
+# Predictions are merged by PatientID over the shared patients only.
+# ---------------------------------------------------------------------------
+roi_comparison:
+  reference_name: gradient_phase3b
+  reference_config: config/phase3b.yaml
+  reference_predictions_dir: predictions
+  reference_model_suffix: "_3b"
+  overlap_file: reports/gradient_vs_gtv_rim_overlap.csv
+  expected_shared_patients: 194
+  bootstrap:
+    n_resamples: 5000
+    seed: 20260827
+    unit: patient          # patients are resampled with replacement; NEVER patches
+    ci: 0.95
+  outputs:
+    paired_csv: results/phase5/gradient_vs_gtv_rim_paired.csv
+    bootstrap_json: results/phase5/gradient_vs_gtv_rim_bootstrap.json
+
+outputs:
+  phase_tag: "5"
+  model_prefix: "gtv_rim_"                  # models/gtv_rim_mean_mil/, predictions/gtv_rim_*_oof.csv
+  model_suffix: ""
+  models_dir: models
+  predictions_dir: predictions
+  attention_dir: attention/gtv_rim
+  # attention concentration diagnostics read exactly this namespace, so the
+  # frozen Gradient Phase-3/3B attention statistics are never recomputed
+  attention_sources:
+    - tag: phase5_gtv_rim
+      dir: attention/gtv_rim
+  results_dir: results/phase5
+  results_plain_model_names: true            # results/phase5/ is already the namespace
+  inner_splits_dir: splits/gtv_rim_inner_cv
+  preprocessing_dir: preprocessing/gtv_rim
+  reports_dir: reports
+  run_json: reports/phase5_run.json
+  training_log: logs/phase5_training.log

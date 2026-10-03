@@ -1,0 +1,42 @@
+# ===========================================================================
+# Phase 11 - three-hospital scale-up (user-authorised 2026-09-26, 1-week scope)
+#
+# Adds TCIA Lung-PET-CT-Dx (Second Affiliated Hospital of Harbin Medical
+# University) to LUNG1 + NSCLC-Radiogenomics.  CT only, no PET.
+# Tumour masks for ALL THREE cohorts come from ONE automatic box-seeded
+# method, so the mask source is not a site fingerprint; the expert GTVs of
+# LUNG1 / Radiogenomics are used only to MEASURE that method (Dice).
+# ===========================================================================
+
+lpcd:
+  collection: Lung-PET-CT-Dx
+  nbia_api: "https://services.cancerimagingarchive.net/nbia-api/services/v1"
+  series_listing: external/phase9_candidate_audit/lung-pet-ct-dx/series.json   # read only
+  data_root: "C:/LUNG_phase11/lung_pet_ct_dx"          # user-approved location
+  annotations_dir: "C:/LUNG_phase11/lung_pet_ct_dx/meta/annotations/Annotation"
+  clinical_xlsx: "C:/LUNG_phase11/lung_pet_ct_dx/meta/clinical.xlsx"
+  histology_letters: {A: adenocarcinoma, G: squamous cell carcinoma}   # B/E excluded
+  # series choice: the CT series holding the most annotated slices; ties ->
+  # more images (thinner slices).  Decided from metadata + annotation UIDs only.
+  download_threads: 4
+  timeout_s: 600
+  retries: 4
+  retry_sleep_s: 10
+  keep_zips: true
+
+autoseg:
+  # chosen on the 343 expert GTVs ONLY (no ADC/SCC label involved):
+  # mean Dice  -700: 0.827/0.802   -750: 0.818/0.824   -800: 0.808/0.836 (LUNG1/RG)
+  # -750 maximises the smaller of the two cohort means.
+  threshold_hu: -750
+  auto_root: "C:/LUNG_phase11/auto_masks"
+
+features:
+  out_dir: global_features/phase11
+  spacing_mm: 2.0
+  # regions built from AUTO_GTV on the 2 mm grid
+  inner_ring_mm: 4.0            # GTV voxels within 4 mm of its boundary
+  outer_shells_mm: [[0, 4], [4, 8], [8, 12]]
+  # PyRadiomics: ORIGINAL image only (thick-slice cohort -> no LoG/wavelet)
+  resegment_range: [-1024, 200]
+  bin_width: 20

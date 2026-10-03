@@ -1,0 +1,80 @@
+# Phase 3 - MIL modelling configuration.
+# Scientific parameters live here, never hard-coded in src/.
+# Nothing in this file may change the frozen Phase-2 bags or the frozen split.
+
+phase3:
+  name: gradient_mil
+  roi: gradient
+  # frozen, read-only inputs
+  features_dir: patch_features/gradient
+  splits_file: splits/stratified_5fold.csv
+  splits_meta_file: splits/stratified_5fold_meta.json
+  feature_names_file: config/feature_names.txt
+  cohort_file: cohort/gradient_cohort.csv
+  expected_patients: 194
+  expected_adc: 49
+  expected_scc: 145
+  expected_features: 74
+  expected_extraction_signature: "04f11c6b6eb993a7"
+
+inner_split:
+  # stratified inner validation subset drawn from the OUTER TRAIN patients only,
+  # used exclusively for early stopping.
+  val_fraction: 0.15
+  # fold-specific seed = base_seed + fold  (fold in 1..5)
+  base_seed: 1000
+  min_per_class_in_val: 2
+  min_per_class_in_train: 2
+
+preprocessing:
+  # deterministic near-zero-variance rule, evaluated on INNER TRAIN PATCHES ONLY
+  variance:
+    absolute_std_threshold: 1.0e-8         # drop if std <= this
+    relative_std_threshold: 1.0e-8         # drop if std / (|mean| + eps) <= this
+    eps: 1.0e-12
+  standardize: zscore                      # (x - mean_innertrain) / std_innertrain
+
+model:
+  input_dim: 74
+  encoder_hidden: [64, 32]                 # 74 -> 64 -> 32
+  activation: relu
+  dropout: 0.2
+  attention_hidden: 32                     # gated attention V/U dimension
+  # identical for both models; only pooling differs
+  pooling:
+    mean_mil: mean
+    attention_mil: gated_attention
+
+training:
+  optimizer: adam
+  learning_rate: 1.0e-3
+  weight_decay: 1.0e-4
+  max_epochs: 100
+  early_stopping_patience: 12
+  early_stopping_metric: val_roc_auc       # patient level, maximised
+  bags_per_batch: 1                        # one patient = one bag = one loss contribution
+  loss: weighted_bce_with_logits
+  pos_weight_source: inner_train_patient_counts   # N_SCC_patients / N_ADC_patients
+  device: cpu
+
+seeds:
+  python: 42
+  numpy: 42
+  torch: 42
+  # fold-specific training seed = train_base_seed + fold
+  train_base_seed: 2000
+  deterministic_torch: true
+
+evaluation:
+  threshold: 0.5
+  positive_class: 1                        # ADC
+  small_bag_threshold: 20                  # reported separately, never excluded
+
+outputs:
+  models_dir: models
+  predictions_dir: predictions
+  attention_dir: attention/gradient
+  results_dir: results
+  inner_splits_dir: splits/inner_validation
+  preprocessing_dir: preprocessing/gradient
+  reports_dir: reports

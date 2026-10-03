@@ -1,0 +1,8 @@
+# Frozen Phase-1 pilot: both histologies x (smallest / median / largest) Gradient ROI.
+# Volumes are the native-grid Gradient volumes from Vuong5ROI cohort_summary.csv.
+LUNG1-197   # ADC, 13.3 cm3  (cohort minimum for ADC)
+LUNG1-114   # ADC, 118.7 cm3 (ADC median)
+LUNG1-140   # ADC, 516.7 cm3 (ADC maximum)
+LUNG1-046   # SCC, 14.3 cm3  (cohort minimum for SCC)
+LUNG1-098   # SCC, 130.2 cm3 (SCC median)
+LUNG1-153   # SCC, 549.0 cm3 (cohort maximum)

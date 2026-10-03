@@ -1,0 +1,93 @@
+# Phase 4 - GTV+Rim local-radiomics extraction configuration
+#
+# The scientific parameters below are COPIED VERBATIM from the validated
+# Gradient configuration (config/experiment.yaml) so that GTV+Rim and Gradient
+# can be compared fairly.  Only the ROI, the cohort definition and the
+# project-owned output paths differ.  Nothing here was tuned for this ROI.
+
+experiment:
+  name: gtv_rim_local_radiomics
+  phase: 4
+  roi: gtv_rim
+  roi_filename: ROI_E_GTV_Rim.nii.gz
+
+paths:
+  # READ-ONLY external inputs (identical to the Gradient experiment)
+  vuong_root: "D:/User/Documents/L.U.N.G/Vuong5ROI/outputs/full_cohort"
+  cohort_summary: "D:/User/Documents/L.U.N.G/Vuong5ROI/outputs/full_cohort/cohort_summary.csv"
+  dataset_metadata: "D:/User/Documents/L.U.N.G/Dataset/Lung1 clinical/dataset_metadata_master.csv"
+  ct_filename: CT.nii.gz
+  gtv_filename: ROI_A_GTV.nii.gz
+  # project-owned outputs -- a namespace fully separate from Gradient
+  cohort_file: cohort/gtv_rim_cohort.csv
+  features_dir: patch_features/gtv_rim
+  splits_file: splits/gtv_rim_stratified_5fold.csv
+  qa_dir: qa
+  qa_patches_dir: qa/gtv_rim_patches
+  pilot_file: config/gtv_rim_pilot_patients.txt
+  # the 74 feature names are shared with Gradient ON PURPOSE: identical
+  # families, identical order, verified bag-by-bag in QA
+  feature_names_file: config/feature_names.txt
+  extraction_qa_csv: "reports/gtv_rim_extraction_qa_{tag}.csv"
+  extraction_summary_json: "reports/gtv_rim_extraction_summary_{tag}.json"
+  # independently re-derived cohort QA -- the Phase-4 deliverables
+  cohort_qa_csv: reports/gtv_rim_extraction_qa.csv
+  cohort_qa_json: reports/gtv_rim_extraction_summary.json
+  geometry_csv: reports/gtv_rim_geometry_check.csv
+  geometry_json: reports/gtv_rim_geometry_check_summary.json
+
+cohort:
+  expected_total_subjects: 203
+  expected_eligible: 202
+  exclusions_key: gtv_rim_exclusions
+  # ROI-specific metadata columns (Vuong5ROI cohort_summary.csv and
+  # dataset_metadata_master.csv both carry Excluded_From_GTV_Rim)
+  exclusion_column: Excluded_From_GTV_Rim
+  exclusion_field: excluded_from_gtv_rim
+  roi_volume_column: GTVRim_Volume_mm3
+  roi_volume_field: gtv_rim_volume_mm3
+  # The single subject with no valid GTV+Rim ROI.  The eight further Gradient
+  # exclusions (LUNG1-017/-040/-041/-071/-109/-127/-157/-170) were caused by the
+  # 4 mm inward contraction of the Gradient definition and DO NOT apply here.
+  gtv_rim_exclusions:
+    - LUNG1-011   # non-uniform slice spacing / 96 unmapped SEG frames
+  histology_map:
+    adenocarcinoma: 1          # positive class
+    squamous cell carcinoma: 0
+
+# ------------------------------------------------------------------
+# FROZEN, identical to config/experiment.yaml.  Do not tune for this ROI.
+# ------------------------------------------------------------------
+preprocessing:
+  resample_spacing_mm: [2.0, 2.0, 2.0]
+  ct_interpolator: linear
+  mask_interpolator: nearest
+  ct_default_value: -1024.0
+
+patches:
+  size_voxels: [5, 5, 5]
+  stride_voxels: [5, 5, 5]
+  # anchored at resampled voxel (0,0,0), the SAME global lattice as Gradient, so
+  # a patch start index means the same physical location in both experiments
+  grid_anchor: image_origin
+  require_full_in_bounds: true
+  require_center_in_roi: true
+  min_roi_voxels: 27
+
+radiomics:
+  params_file: config/radiomics_params.yaml
+  bin_width: 20
+  resegment_range: [-1024, 200]
+  resegment_mode: absolute
+  image_types: [Original]
+  feature_classes: [firstorder, glcm, glrlm, glszm]
+  shape_features: false
+
+validation:
+  n_splits: 5
+  random_state: 42
+  shuffle: true
+  stratify_by: label
+
+reproducibility:
+  seed: 42

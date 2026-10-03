@@ -1,0 +1,157 @@
+# ===========================================================================
+# Phase 9A - evidence-based candidate assessment.
+#
+# Recorded here rather than hard-coded in src/, per the project's
+# reproducibility discipline.  Every `segmentation_code` is justified by
+# `segmentation_evidence`, which names its source: official TCIA metadata
+# (the cached getSeries listing), an official TCIA collection or
+# analysis-result page, or a supplied paper.
+#
+# Codes are never softened.  NO field in this file is, or may become, a
+# model-performance estimate (protocol section 5).
+# ===========================================================================
+
+assessment:
+  TCGA_LUAD_LUSC:
+    pre_treatment_ct: "mixed - diagnostic CT, many series per subject including follow-up, PET/CT and FNA-guided scans; pre-treatment status must be curated per subject"
+    segmentation_code: E
+    segmentation_evidence: "TCIA getSeries: 903 series across TCGA-LUAD + TCGA-LUSC, modalities CT/PT/NM only, ZERO SEG and ZERO RTSTRUCT. TCIA analysis results Crowds-Cure-2017 (RECIST linear measurements as DICOM-SR/CSV, LUAD only, LUSC not covered) and SAROS (organ/body-region only, sparse every-5th-slice, 2 LUAD + 3 LUSC cases) provide NO primary-tumour 3D mask. Song et al. 2023 section 2.4: TCGA-LUSC and TCGA-LUAD had no tumor segmentation files and were manually segmented by five radiologists."
+    segmentation_provenance: "none public; Song et al. 2023 segmented manually, masks not released"
+    institution_independence: "independent - Barnes-Jewish/WashU, Univ. Pittsburgh UPMC, UNC, Lahey (USA); different from MAASTRO (LUNG1) and Stanford/Palo Alto VA (Radiogenomics)"
+    acquisition_diversity: "high - multi-institution US diagnostic CT; GE/Siemens/Philips; contrast and non-contrast"
+    technical_processing_difficulty: "high - 8.5 CT series per subject on average; series selection and pre-treatment verification required before any segmentation"
+    manual_expert_work_required: "yes - full manual 3D primary-tumour segmentation of every eligible subject"
+    suitable_as_primary_external_test: "no - fails R4 (no usable 3D tumour segmentation)"
+    notes: "Strongest candidate on independence, provenance and size; blocked solely by segmentation."
+
+  LUNG3:
+    pre_treatment_ct: "yes - pretreatment CT per TCIA"
+    segmentation_code: E
+    segmentation_evidence: "TCIA getSeries: 89 series, modality CT only, ZERO SEG and ZERO RTSTRUCT. Official TCIA data summary: Modalities CT, Participants 89, Series 89. Song et al. 2023 section 2.4 lists NSCLC-Radiomics-Genomics among the databases that had no tumor segmentation files."
+    segmentation_provenance: "none public; Song et al. 2023 segmented manually, masks not released"
+    institution_independence: "DEFECT - MAASTRO Clinic, the same centre as LUNG1"
+    acquisition_diversity: "low relative to LUNG1 - same centre; Philips 49 / Siemens 39 / GE 1"
+    technical_processing_difficulty: "low for CT conversion; segmentation is the blocker"
+    manual_expert_work_required: "yes - full manual 3D primary-tumour segmentation"
+    suitable_as_primary_external_test: "no - fails R4 (no segmentation) and carries a same-centre independence defect"
+    notes: "Same-centre as LUNG1 (protocol 4.1). Would test transport far more weakly than an independent cohort even if segmented."
+
+  LUNG_PET_CT_DX:
+    pre_treatment_ct: "yes - diagnostic pre-treatment CT and PET/CT"
+    segmentation_code: D
+    segmentation_evidence: "TCIA getSeries: 1295 series, modalities CT 1162 / PT 133, ZERO SEG and ZERO RTSTRUCT. Official TCIA collection page: XML Annotation files that indicate tumor location with bounding boxes, saved as XML files in PASCAL VOC format. Song et al. 2023 section 2.4: the Lung-PET-CT-Dx only provided tumor location boxes that could not be used directly."
+    segmentation_provenance: "2D bounding boxes only (PASCAL VOC XML); not a 3D segmentation"
+    institution_independence: "independent - Second Affiliated Hospital of Harbin Medical University (China)"
+    acquisition_diversity: "high - Siemens 673 / GE 370 / Philips 119 CT series"
+    technical_processing_difficulty: "high - 118 GiB; box-to-mask conversion would be an automated-segmentation decision under protocol 3.1"
+    manual_expert_work_required: "yes - manual 3D segmentation, or an explicitly approved automated method seeded by the boxes"
+    suitable_as_primary_external_test: "no - fails R4 (bounding boxes are not segmentations, protocol 3.2)"
+    notes: "By far the largest eligible ADC/SCC pool; histology is deterministic from the TCIA PatientID convention (A = ADC, G = SCC)."
+
+  INTEROBSERVER1:
+    pre_treatment_ct: "yes - radiotherapy planning CT"
+    segmentation_code: A
+    segmentation_evidence: "TCIA getSeries: 64 series - CT 22, RTSTRUCT 21, SEG 21; 21 of 22 subjects carry both a CT and a segmentation series. Official TCIA page: repeated blinded manual delineations by five radiation oncologists, DICOM RTSTRUCT and DICOM SEG. Song et al. 2023 section 2.4: NSCLC-Radiomics-Interobserver1 provided complete tumor VOI segmentation files."
+    segmentation_provenance: "public, manual, five radiation oncologists; manual and autosegmentation-assisted variants"
+    institution_independence: "DEFECT - MAASTRO / Maastricht University Medical Centre+, the same centre as LUNG1; TCIA does not document whether these 22 subjects overlap the 422 Lung1 subjects"
+    acquisition_diversity: "very low relative to LUNG1 - same centre, all 22 CT series Siemens"
+    technical_processing_difficulty: "low - 3.0 GiB, DICOM SEG already decoded successfully in Phase 8A"
+    manual_expert_work_required: "no"
+    suitable_as_primary_external_test: "no - fails the size rule (22 subjects; 16 ADC/SCC per Song) and carries an unresolved same-centre overlap risk"
+    notes: "The only public ADC/SCC-relevant collection with directly reusable primary-tumour segmentation, but far too small and not independent of LUNG1."
+
+  LUNGCT_DIAGNOSIS:
+    pre_treatment_ct: "yes"
+    segmentation_code: E
+    segmentation_evidence: "TCIA getSeries: 61 series, modality CT only, ZERO SEG and ZERO RTSTRUCT. Song et al. 2023 section 2.4 lists LungCT-Diagnosis among the databases with no tumor segmentation files."
+    segmentation_provenance: "none public"
+    institution_independence: "independent of LUNG1 and Radiogenomics (Moffitt, USA), BUT 24 of its 61 subjects share the R-number identifier scheme with QIN LUNG CT from the same institution"
+    acquisition_diversity: "moderate - Siemens 54 / GE 5 / Toshiba 2"
+    technical_processing_difficulty: "low - 2.3 GiB"
+    manual_expert_work_required: "yes - full manual 3D segmentation"
+    suitable_as_primary_external_test: "no - fails R4 and R8 (Song screened 61 ADC and 0 SCC: single class)"
+    notes: "Single-histology in the supplied literature; cannot support a binary external test on its own."
+
+  QIN_LUNG_CT:
+    pre_treatment_ct: "yes"
+    segmentation_code: A
+    segmentation_evidence: "TCIA getSeries: 137 series - CT 47, SEG 90; but only 10 of 47 subjects carry a SEG series (the QIN-LSC and QIN-LUNG-01 subjects). The 37 R-number subjects have CT only."
+    segmentation_provenance: "public DICOM SEG for 10 subjects (QIN-LungCT-Seg)"
+    institution_independence: "DEFECT versus another candidate - Moffitt; 24 of its 37 R-number subjects have an exact R-number twin in LungCT-Diagnosis (R0004/R_004 through R0274/R_274)"
+    acquisition_diversity: "moderate - Siemens 43 / GE 3 / Toshiba 1"
+    technical_processing_difficulty: "low - 2.3 GiB"
+    manual_expert_work_required: "yes for the 37 unsegmented subjects"
+    suitable_as_primary_external_test: "no - only 10 segmented subjects; histology not broken down by TCIA; probable overlap with LungCT-Diagnosis"
+    notes: "Demonstrates that differently named collections are not automatically independent (protocol section 4)."
+
+  SPIE_AAPM:
+    pre_treatment_ct: "yes"
+    segmentation_code: E
+    segmentation_evidence: "TCIA getSeries: 70 series, modality CT only, ZERO SEG and ZERO RTSTRUCT."
+    segmentation_provenance: "none public; nodule centroid locations only"
+    institution_independence: "independent (SPIE / AAPM / NCI challenge)"
+    acquisition_diversity: "low - all 70 CT series Philips"
+    technical_processing_difficulty: "low - 11.2 GiB"
+    manual_expert_work_required: "yes - full manual 3D segmentation"
+    suitable_as_primary_external_test: "no - fails R4; a benign-versus-malignant nodule challenge, not an ADC/SCC histology cohort"
+    notes: "Not screened for ADC/SCC by any supplied paper."
+
+  ANTI_PD1_LUNG:
+    pre_treatment_ct: "no - immunotherapy response cohort, scans span treatment"
+    segmentation_code: E
+    segmentation_evidence: "TCIA getSeries: 677 series, modalities CT 571 / PT 103 / OT 3, ZERO SEG and ZERO RTSTRUCT."
+    segmentation_provenance: "none public"
+    institution_independence: "independent (Dana-Farber and Brigham, USA)"
+    acquisition_diversity: "high - GE 363 / Siemens 189 / Toshiba 15 / Philips 4"
+    technical_processing_difficulty: "high - 57 GiB, longitudinal series selection"
+    manual_expert_work_required: "yes - full manual 3D segmentation"
+    suitable_as_primary_external_test: "no - fails R1 and R4"
+    notes: "On-treatment and post-treatment imaging is outside the pre-treatment requirement."
+
+  ACRIN_NSCLC_FDG_PET:
+    pre_treatment_ct: "partly - ACRIN 6668 acquired baseline and post-treatment PET/CT"
+    segmentation_code: E
+    segmentation_evidence: "TCIA getSeries: 3377 series, modalities CT 2259 / PT 997 / MR 70 / NM 23 / CR 19 / DX 5 / OT 4, ZERO SEG and ZERO RTSTRUCT."
+    segmentation_provenance: "none public"
+    institution_independence: "independent - ACRIN 6668 multi-centre trial (USA)"
+    acquisition_diversity: "very high - multi-centre trial"
+    technical_processing_difficulty: "very high - 135 GiB, 950 studies, mixed modalities, longitudinal"
+    manual_expert_work_required: "yes - full manual 3D segmentation"
+    suitable_as_primary_external_test: "no - fails R4; ADC/SCC histology not established by any supplied paper or by TCIA metadata"
+    notes: "Not screened for ADC/SCC by any supplied paper."
+
+  LUNG_FUSED_CT_PATHOLOGY:
+    pre_treatment_ct: "yes - pre-surgical"
+    segmentation_code: A
+    segmentation_evidence: "TCIA getSeries: 52 series - CT 22, FUSION 18, SEG 12; all 6 subjects carry both CT and SEG."
+    segmentation_provenance: "public DICOM SEG"
+    institution_independence: "independent (Case Western Reserve, USA)"
+    acquisition_diversity: "not recorded - CT Manufacturer missing on all 22 CT series"
+    technical_processing_difficulty: "low - 5.5 GiB"
+    manual_expert_work_required: "no"
+    suitable_as_primary_external_test: "no - 6 subjects; fails the size rule by an order of magnitude"
+    notes: "Too small for any validation role."
+
+  FOUR_D_LUNG:
+    pre_treatment_ct: "yes - 4D respiratory-correlated planning CT"
+    segmentation_code: A
+    segmentation_evidence: "TCIA getSeries: 6690 series - CT 5890, RTSTRUCT 800; all 20 subjects carry both."
+    segmentation_provenance: "public RTSTRUCT (radiotherapy planning structures)"
+    institution_independence: "independent (MD Anderson and Univ. of Iowa, USA)"
+    acquisition_diversity: "low - Varian 5070 / ADAC 820, 4D-CT only"
+    technical_processing_difficulty: "very high - 170 GiB, 589 studies, 4D phase-resolved series selection"
+    manual_expert_work_required: "no for masks; yes for phase and series curation"
+    suitable_as_primary_external_test: "no - 20 subjects; ADC/SCC histology not established"
+    notes: "4D-CT is a different acquisition class from both development cohorts."
+
+  RIDER_LUNG_CT:
+    pre_treatment_ct: "yes - but a same-day test/retest design"
+    segmentation_code: A
+    segmentation_evidence: "TCIA getSeries: 2072 series - CT 561, SEG 844, RTSTRUCT 59, PR 384, SR 224; all 32 subjects carry CT and segmentation."
+    segmentation_provenance: "public SEG and RTSTRUCT (RIDER-LungCT-Seg)"
+    institution_independence: "independent (Memorial Sloan Kettering, USA)"
+    acquisition_diversity: "low - GE 498 CT series"
+    technical_processing_difficulty: "moderate - 42 GiB; each subject scanned twice"
+    manual_expert_work_required: "no"
+    suitable_as_primary_external_test: "no - 32 subjects, repeat scans of the same patients, ADC/SCC histology not established"
+    notes: "A reproducibility and test-retest collection, not a histology cohort."

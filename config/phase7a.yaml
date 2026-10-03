@@ -1,0 +1,368 @@
+# ===========================================================================
+# Phase 7A - whole-region (global) GTV / rim radiomics under the frozen
+#            202-patient GTV+Rim split.
+#
+# Protocol authority: docs/PHASE7_PROTOCOL.md (SHA-256 recorded in
+# reports/phase7a_run.json before any Phase-7 model was trained).
+#
+# Phase 7A is the "missing global control" of the Phase-7 methodology
+# (references/ADC_SCC_Breakthrough_Methodology.pdf).  It is NOT a continuation
+# of the Phase-6 modelling direction.  Phases 1-6C are completed exploratory
+# development and every one of their artefacts must remain byte-identical.
+#
+# EVERY scientific parameter lives in this file or in
+# config/phase7a_pyradiomics.yaml.  Nothing scientific is hard-coded in src/.
+# ===========================================================================
+
+experiment:
+  name: phase7a_global_region_radiomics
+  phase: 7A
+  protocol_doc: docs/PHASE7_PROTOCOL.md
+  positive_class: adenocarcinoma        # ADC = 1
+  # Phase 7B/7C/7D are NOT authorised by this config and no code for them exists.
+  authorised_scope: [A0, A1, A2, A3, mrmr_secondary]
+
+paths:
+  # READ-ONLY external inputs
+  vuong_root: "D:/User/Documents/L.U.N.G/Vuong5ROI/outputs/full_cohort"
+  dataset_metadata: "D:/User/Documents/L.U.N.G/Dataset/Lung1 clinical/dataset_metadata_master.csv"
+  ct_filename: CT.nii.gz
+  gtv_filename: ROI_A_GTV.nii.gz
+  gtv_rim_filename: ROI_E_GTV_Rim.nii.gz
+  # FROZEN project inputs (read-only for Phase 7A)
+  cohort_file: cohort/gtv_rim_cohort.csv
+  splits_file: splits/gtv_rim_stratified_5fold.csv
+  splits_meta_file: splits/gtv_rim_stratified_5fold_meta.json
+  splits_file_sha256: "89dc0b619dd1a2dc2057ead9a91ac1aa4d2f2d9a1bec65f0c7106831a5eae021"
+  # Phase-7A-owned outputs
+  pyradiomics_params: config/phase7a_pyradiomics.yaml
+  features_dir: global_features/phase7a
+  cache_dir: global_features/phase7a/cache
+  gtv_csv: global_features/phase7a/gtv.csv
+  rim_csv: global_features/phase7a/rim.csv
+  manifest_csv: reports/phase7a_extraction_manifest.csv
+  feature_names_json: global_features/phase7a/feature_names.json
+  geometry_csv: global_features/phase7a/region_geometry.csv
+  pilot_json: qa/phase7a/pilot_qa.json
+  qa_dir: qa/phase7a
+  models_dir: models/phase7a
+  preprocessing_dir: preprocessing/phase7a
+  predictions_dir: predictions/phase7a
+  results_dir: results/phase7a
+  reports_dir: reports
+  run_json: reports/phase7a_run.json
+  tests_json: reports/phase7a_tests.json
+  pre_snapshot: reports/phase7a_pre_snapshot.json
+  training_log: logs/phase7a.log
+
+# ---------------------------------------------------------------------------
+# COHORT - the frozen GTV+Rim cohort.  Not regenerated, not re-derived.
+# ---------------------------------------------------------------------------
+cohort:
+  expected_patients: 202
+  expected_adc: 51
+  expected_scc: 151
+  exclusions: [LUNG1-011]
+  histology_map:
+    adenocarcinoma: 1
+    squamous cell carcinoma: 0
+
+# ---------------------------------------------------------------------------
+# REGIONS - two global regions, derived deterministically on the shared 2 mm
+# grid.  Gradient is NOT used in Phase 7A.  No "cleaned" ROI product is used.
+# ---------------------------------------------------------------------------
+regions:
+  gtv:
+    source: gtv_filename
+    definition: "ROI_A_GTV.nii.gz resampled to the 2 mm grid (nearest)"
+    shape_features: true
+  rim:
+    definition: "(ROI_E_GTV_Rim.nii.gz AND NOT ROI_A_GTV.nii.gz), both resampled to the SAME 2 mm grid (nearest)"
+    shape_features: false           # protocol: no rim shape in the primary bank
+  verification:
+    require_disjoint: true               # GTV n Rim = empty
+    require_union_equals_gtv_rim: true   # GTV u Rim = GTV+Rim
+    require_gtv_subset_of_gtv_rim_native: true
+    min_region_voxels: 1
+
+# ---------------------------------------------------------------------------
+# PREPROCESSING - the already validated project standard.  2.0 mm is FROZEN by
+# the Phase-7 protocol; no 3.75 mm sensitivity analysis is run in Phase 7A.
+# ---------------------------------------------------------------------------
+preprocessing:
+  resample_spacing_mm: [2.0, 2.0, 2.0]
+  ct_interpolator: linear
+  mask_interpolator: nearest
+  ct_default_value: -1024.0
+
+radiomics:
+  params_file: config/phase7a_pyradiomics.yaml
+  bin_width: 20
+  resegment_range: [-1024, 200]
+  resegment_mode: absolute
+  image_types: [Original, LoG, Wavelet]
+  log_sigma_mm: [2.0, 3.0, 4.0]
+  wavelet_level: 1
+  wavelet_name: coif1
+  feature_classes: [shape, firstorder, glcm, glrlm, glszm, gldm, ngtdm]
+  rim_feature_classes: [firstorder, glcm, glrlm, glszm, gldm, ngtdm]
+  drop_column_prefixes: [diagnostics_]
+  # +/-inf produced by any feature is recorded in the manifest and converted to
+  # NaN at load time, so it is handled by the training-only imputer like any
+  # other missing value.  It is never silently replaced by a number.
+  inf_policy: convert_to_nan_at_load
+
+pilot:
+  n_patients: 6
+  # smallest / largest GTV volume, first / last PatientID and two evenly spaced
+  # interior patients of the sorted 202 - deterministic and label-blind.
+  selection_rule: deterministic_volume_spread
+  require_pass_before_full_extraction: true
+
+# ---------------------------------------------------------------------------
+# NESTED VALIDATION - frozen outer split, stratified 3-fold patient-level inner
+# CV.  Nothing outside the inner-training partition may influence any choice.
+# ---------------------------------------------------------------------------
+validation:
+  outer:
+    source: frozen_file
+    n_folds: 5
+  inner:
+    n_splits: 3
+    shuffle: true
+    base_seed: 3000              # inner seed = base_seed + outer_fold (project convention)
+    stratify_by: label
+  training_only:
+    - imputation
+    - categorical_encoding
+    - variance_filtering
+    - scaling
+    - feature_selection
+    - elastic_net_hyperparameters
+    - mrmr
+    - fusion_fitting
+    - calibration
+    - threshold_selection
+
+# ---------------------------------------------------------------------------
+# THE FROZEN PREPROCESSING PIPELINE, in order, fitted on the training partition
+# of whatever level it is used at (inner-training, or all outer-training).
+# ---------------------------------------------------------------------------
+pipeline:
+  steps: [drop_non_feature_columns, median_impute, near_zero_variance_filter, standard_scaler, estimator]
+  imputer:
+    strategy: median
+    # a column entirely NaN in the training partition has no median; it is
+    # filled with 0.0 and is then constant, so the variance screen drops it.
+    all_nan_fill: 0.0
+  variance_filter:
+    # the frozen project rule, unchanged since Phase 3
+    rule: "drop if std <= abs_tol or std/(abs(mean)+1e-12) <= rel_tol"
+    abs_tol: 1.0e-8
+    rel_tol: 1.0e-8
+  scaler:
+    type: standard
+    with_mean: true
+    with_std: true
+
+# ---------------------------------------------------------------------------
+# MODELS
+# ---------------------------------------------------------------------------
+models:
+
+  A0:
+    name: clinical_control
+    role: control_only
+    features: [age, sex, stage]
+    source_columns:
+      age: Age
+      sex: Gender
+      stage: Overall_Stage
+    encoding:
+      sex: one_hot            # categories learned from TRAINING patients only
+      stage: one_hot          # categories learned from TRAINING patients only
+      unseen_category: all_zero
+      missing_category_indicator: true
+    imputation:
+      age: training_median
+      categorical: training_mode
+    estimator: LogisticRegression
+    penalty: l2               # ridge
+    solver: lbfgs
+    class_weight: balanced
+    max_iter: 20000
+    tol: 1.0e-6
+    random_state: 42
+    C_grid: [0.001, 0.003, 0.01, 0.03, 0.1, 0.3, 1.0, 3.0]
+
+  A1:
+    name: whole_gtv_global_radiomics
+    region: gtv
+    estimator: LogisticRegression
+    penalty: elasticnet
+    solver: saga
+    class_weight: balanced
+    max_iter: 20000
+    tol: 1.0e-4
+    random_state: 42
+    grid:
+      l1_ratio: [0.25, 0.50, 0.75, 0.90]
+      C: [0.001, 0.003, 0.01, 0.03, 0.1, 0.3, 1.0, 3.0]
+    selection:
+      objective: mean_inner_cv_roc_auc
+      tie_break: [smaller_C, smaller_l1_ratio, config_order]
+    # LOW-CAPACITY CAP, applied deterministically INSIDE the current training
+    # partition: rank the non-zero elastic-net coefficients by |coef|, keep at
+    # most the top 8 original radiomic dimensions, refit the SAME logistic
+    # model (same penalty, C and l1_ratio) on those columns only.
+    feature_cap:
+      max_features: 8
+      rank_by: absolute_coefficient
+      tie_break: lowest_feature_index
+      refit: same_estimator_same_hyperparameters
+      zero_selection: prior_probability_constant   # recorded, never substituted
+
+  A2:
+    name: whole_rim_global_radiomics
+    region: rim
+    same_procedure_as: A1     # ONLY the region changes.  No separate grid.
+
+  A3:
+    name: gtv_rim_late_fusion
+    role: primary_fusion
+    components: [A1, A2]
+    inputs: [P_ADC_GTV, P_ADC_RIM]
+    input_scale: probability   # the component probability, identical on both sides
+    estimator: LogisticRegression
+    penalty: l2                # ridge stacker
+    solver: lbfgs
+    C: 1.0
+    class_weight: balanced
+    max_iter: 20000
+    tol: 1.0e-6
+    random_state: 42
+    # The stacker is fitted ONLY on inner-OOF component predictions of the
+    # outer-training patients.  An in-sample component prediction (a component
+    # model scoring a patient it was trained on) must NEVER enter A3 training.
+    fusion_training_inputs: inner_oof_only
+    # A3 inner-OOF predictions - needed for calibration and threshold - come
+    # from re-running the SAME inner 3-fold assignment over the fusion input
+    # matrix.  No extra split, no outer-test patient.
+    inner_oof_rule: same_inner_folds_over_fusion_inputs
+
+# ---------------------------------------------------------------------------
+# SECONDARY analysis only.  It never determines the Phase-7A gate.
+# ---------------------------------------------------------------------------
+secondary:
+  mrmr:
+    enabled: true
+    role: secondary_only
+    regions: [gtv, rim]
+    k: [5, 8]
+    criterion: FCD_difference          # Ding & Peng (2003), as in Phase 5C
+    relevance: anova_f_statistic
+    redundancy: mean_absolute_pearson_correlation
+    tie_break: lowest_feature_index
+    zero_variance_relevance: 0.0
+    zero_variance_correlation: 0.0
+    # mRMR ranks PATIENT-level global rows.  Patch-level labels do not exist here.
+    unit: patient
+    estimator: LogisticRegression
+    penalty: l2
+    solver: lbfgs
+    class_weight: balanced
+    C: 1.0
+    max_iter: 20000
+    random_state: 42
+
+# ---------------------------------------------------------------------------
+# CALIBRATION AND THRESHOLD - both fitted on inner-OOF predictions of the
+# outer-training patients only, then frozen and applied once to the outer test.
+# ---------------------------------------------------------------------------
+calibration:
+  method: platt
+  input: logit_of_inner_oof_probability
+  clip: 1.0e-6
+  estimator: LogisticRegression
+  solver: lbfgs
+  C: 1.0e6                 # effectively unpenalised: the Platt sigmoid MLE
+  class_weight: null       # calibration must NOT be class-reweighted
+  max_iter: 20000
+  random_state: 42
+
+threshold:
+  objective: balanced_accuracy
+  candidates: unique_calibrated_inner_oof_probabilities
+  tie_break: closest_to_0.5
+  legacy_threshold: 0.5    # reported as a SECONDARY comparison only
+
+# ---------------------------------------------------------------------------
+# METRICS AND UNCERTAINTY
+# ---------------------------------------------------------------------------
+evaluation:
+  unit: patient
+  positive_class: 1
+  # PRIMARY pooled OOF discrimination is computed on the CALIBRATED
+  # out-of-fold probabilities, because Platt scaling (fitted training-only) is
+  # what makes the five folds' scores comparable enough to pool.  The
+  # uncalibrated pooled value is reported alongside as a secondary number.
+  # FROZEN BEFORE ANY MODEL WAS TRAINED.
+  pooled_probability: calibrated
+  report_uncalibrated_pooled: true
+  metrics:
+    - roc_auc
+    - pr_auc
+    - balanced_accuracy
+    - sensitivity_adc
+    - specificity
+    - precision
+    - f1
+    - mcc
+    - accuracy
+    - brier
+    - calibration_intercept
+    - calibration_slope
+  bootstrap:
+    n_resamples: 5000
+    unit: patient            # patients, NEVER feature rows or patches
+    ci: 0.95
+    merge_on: PatientID
+    comparisons:
+      - {tag: A3_minus_A1, a: A3, b: A1, seed: 20260951}
+      - {tag: A3_minus_A2, a: A3, b: A2, seed: 20260952}
+      - {tag: A3_minus_A0, a: A3, b: A0, seed: 20260953}
+      - {tag: A3_minus_phase6b, a: A3, b: phase6b_attention, seed: 20260954}
+      - {tag: A1_minus_A0, a: A1, b: A0, seed: 20260955}
+      - {tag: A2_minus_A0, a: A2, b: A0, seed: 20260956}
+      - {tag: A2_minus_A1, a: A2, b: A1, seed: 20260957}
+      - {tag: A3_minus_phase5c, a: A3, b: phase5c_mrmr_attention, seed: 20260958}
+
+# ---------------------------------------------------------------------------
+# BASELINES - read from disk, NEVER retrained.
+# ---------------------------------------------------------------------------
+baselines:
+  phase6b_attention:
+    predictions: predictions/phase6b_cnn_attention_oof.csv
+    expected_roc_auc: 0.6146
+    expected_pr_auc: 0.3370
+  phase5c_mrmr_attention:
+    predictions: predictions/phase5c_mrmr_attention_oof.csv
+    expected_roc_auc: 0.5929
+
+# ---------------------------------------------------------------------------
+# GATE 7A - the STRICTER of the two phrasings in the methodology document.
+# Frozen before any result was seen.  It must not be weakened afterwards.
+# ---------------------------------------------------------------------------
+gate_7a:
+  rule: AND
+  conditions:
+    - {id: 1, metric: A3_pooled_oof_roc_auc, operator: ">=", value: 0.63}
+    - {id: 2, metric: A3_folds_beating_both_A1_and_A2, operator: ">=", value: 3, of: 5}
+  on_fail: "Phase 7A fails its advancement gate. Phase 7B MUST NOT start."
+  on_pass: "Phase 7B is authorised, but must still be explicitly requested."
+
+reproducibility:
+  seed: 42
+  numpy_seed: 42
+  python_seed: 42
+  device: cpu

@@ -1,0 +1,427 @@
+# ===========================================================================
+# Phase 8B - source-aware MULTICENTER global GTV / rim radiomics.
+#
+# Protocol authority: docs/PHASE8B_MULTICENTER_PROTOCOL.md
+# (SHA-256 recorded in reports/phase8b_run.json by the freeze step, BEFORE any
+#  label was loaded into a model; re-verified by every driver at start-up).
+#
+# Phase 8B RETIRES the untouched-external-test status of NSCLC-Radiogenomics
+# and repurposes it as multicenter development data.  NO Phase-8B result may
+# be described as independent external validation.  A THIRD cohort is still
+# required for that.
+#
+# EVERY scientific parameter lives in this file.  Nothing scientific is
+# hard-coded in src/.
+# ===========================================================================
+
+experiment:
+  name: phase8b_source_aware_multicenter_global_radiomics
+  phase: 8B
+  protocol_doc: docs/PHASE8B_MULTICENTER_PROTOCOL.md
+  positive_class: adenocarcinoma          # ADC = 1, SCC = 0
+  authorised_scope: [A1, A2, A3, domain_diagnostic, prediction_shift_diagnostic]
+  # Explicitly NOT authorised by this config, and no code for them exists:
+  forbidden_scope: [A0_clinical, CNN, ResNet18, CLAM, Transformer, attention,
+                    MIL, local_patches, RandomForest, XGBoost, SVM, deep_MLP,
+                    neural_fusion, SMOTE, ComBat, harmonisation, PCA, SFS,
+                    repeated_nested_cv, phase8c]
+
+  # The status change this phase enacts, machine-readable so the audit can
+  # assert the report never contradicts it.
+  external_status:
+    was: untouched_one_shot_external_test_set        # Phase 8A
+    now: multicenter_development_data                # Phase 8B onward
+    independent_external_validation_claimable: false
+    third_cohort_still_required: true
+    forbidden_claim_phrases:
+      - "external validation"
+      - "externally validated"
+      - "independent external test"
+
+paths:
+  # ---- FROZEN inputs (READ ONLY for Phase 8B) ----------------------------
+  lung1_cohort: cohort/gtv_rim_cohort.csv
+  lung1_gtv_csv: global_features/phase7a/gtv.csv
+  lung1_rim_csv: global_features/phase7a/rim.csv
+  lung1_feature_names_json: global_features/phase7a/feature_names.json
+  external_cohort: external/nsclc_radiogenomics/cohort.csv
+  external_gtv_csv: external/nsclc_radiogenomics/global_features/gtv.csv
+  external_rim_csv: external/nsclc_radiogenomics/global_features/rim.csv
+  external_feature_names_json: external/nsclc_radiogenomics/global_features/feature_names.json
+  # read-only external trees, for the guard check only
+  vuong_root: "D:/User/Documents/L.U.N.G/Vuong5ROI/outputs/full_cohort"
+  dataset_metadata_dir: "D:/User/Documents/L.U.N.G/Dataset/Lung1 clinical"
+
+  # ---- Phase-8B-owned outputs -------------------------------------------
+  cohort_csv: cohort/phase8b_multicenter_cohort.csv
+  split_csv: splits/phase8b_multicenter_5fold.csv
+  split_meta_json: splits/phase8b_multicenter_5fold_meta.json
+  cross_cohort_json: splits/phase8b_cross_cohort.json
+  inner_cv_dir: splits/phase8b_inner_cv
+  models_dir: models/phase8b
+  preprocessing_dir: preprocessing/phase8b
+  predictions_dir: predictions/phase8b
+  results_dir: results/phase8b
+  checkpoints_dir: results/phase8b/checkpoints
+  progress_json: results/phase8b/progress.json
+  run_json: reports/phase8b_run.json
+  tests_json: reports/phase8b_tests.json
+  pre_snapshot: reports/phase8b_pre_snapshot.json
+  readonly_baseline: reports/readonly_baseline.json
+  training_log: logs/phase8b.log
+
+# ---------------------------------------------------------------------------
+# COHORTS - frozen counts.  A driver refuses to run if any of these is wrong.
+# ---------------------------------------------------------------------------
+cohorts:
+  lung1:
+    key_prefix: "LUNG1"
+    expected_patients: 202
+    expected_adc: 51
+    expected_scc: 151
+    exclusions: [LUNG1-011]
+    histology_map:
+      adenocarcinoma: 1
+      squamous cell carcinoma: 0
+  radiogenomics:
+    key_prefix: "RADIOGENOMICS"
+    expected_patients: 141
+    expected_adc: 112
+    expected_scc: 29
+    histology_map:
+      Adenocarcinoma: 1
+      Squamous cell carcinoma: 0
+  combined:
+    expected_patients: 343
+    expected_adc: 163
+    expected_scc: 180
+  patient_key_format: "{prefix}::{PatientID}"
+  strata:
+    variable: cohort_histology
+    levels: [LUNG1_ADC, LUNG1_SCC, RADIOGENOMICS_ADC, RADIOGENOMICS_SCC]
+    expected_counts:
+      LUNG1_ADC: 51
+      LUNG1_SCC: 151
+      RADIOGENOMICS_ADC: 112
+      RADIOGENOMICS_SCC: 29
+  duplicate_screen:
+    require_unique_patient_key: true
+    require_zero_raw_id_collision: true
+    require_zero_exact_duplicate_rows: true
+    # a cross-cohort pair closer than this percentile of the within-cohort
+    # nearest-neighbour distance distribution is flagged as a candidate duplicate
+    nn_distance_percentile: 1.0
+
+# ---------------------------------------------------------------------------
+# FEATURES - cached, never re-extracted.
+# ---------------------------------------------------------------------------
+features:
+  regions: [gtv, rim]
+  expected_extraction_signature: "9666c1a165292d6f"
+  expected_n_gtv: 1130
+  expected_n_rim: 1116
+  require_identical_names_and_order: true
+  rim_must_have_no_shape: true
+  drop_column_prefixes: [diagnostics_]
+  non_feature_columns: [PatientKey, PatientID, Cohort, Histology, label, cohort_histology]
+  rerun_pyradiomics: false          # ONLY a validation failure could change this
+
+# ---------------------------------------------------------------------------
+# SPLITS - frozen before modelling.
+# ---------------------------------------------------------------------------
+validation:
+  outer:
+    n_splits: 5
+    shuffle: true
+    random_state: 42
+    stratify_by: cohort_histology       # NOT label alone
+    require_all_strata_in_every_fold: true
+    sort_by: PatientKey
+  inner:
+    n_splits: 3
+    shuffle: true
+    base_seed: 3000                     # inner seed = base_seed + outer_fold
+    stratify_by: cohort_histology
+    require_all_strata_where_possible: true
+  transfer:
+    directions:
+      - {id: lung1_to_radiogenomics, train: LUNG1, test: RADIOGENOMICS, inner_seed: 8100}
+      - {id: radiogenomics_to_lung1, train: RADIOGENOMICS, test: LUNG1, inner_seed: 8200}
+    inner_n_splits: 3
+    inner_stratify_by: label            # single cohort: cohort factor is constant
+    class_balancing: balanced           # ordinary training-only class balancing
+  training_only:
+    - imputation
+    - variance_filtering
+    - scaling
+    - feature_selection
+    - selector_family_choice
+    - selector_hyperparameters
+    - classifier_hyperparameters
+    - source_balanced_weights
+    - fusion_fitting
+    - calibration
+    - threshold_selection
+
+# ---------------------------------------------------------------------------
+# THE FROZEN PREPROCESSING PIPELINE, fitted on the training partition alone.
+# Implemented by IMPORTING the frozen Phase-7A TrainingOnlyPreprocessor.
+# ---------------------------------------------------------------------------
+pipeline:
+  steps: [drop_non_feature_columns, median_impute, near_zero_variance_filter,
+          standard_scaler, selector, estimator]
+  imputer:
+    strategy: median
+    all_nan_fill: 0.0
+  variance_filter:
+    rule: "drop if std <= abs_tol or std/(abs(mean)+1e-12) <= rel_tol"
+    abs_tol: 1.0e-8
+    rel_tol: 1.0e-8
+  scaler:
+    type: standard
+    with_mean: true
+    with_std: true
+
+# ---------------------------------------------------------------------------
+# SOURCE-BALANCED TRAINING WEIGHTS  (pooled model only)
+#   w_i = N / (S * n_s)   for patient i in stratum s
+#   -> every stratum contributes total weight N/S; mean weight = 1.0
+# Computed from TRAINING-PARTITION counts only.  Never from outer-test counts.
+# ---------------------------------------------------------------------------
+source_weights:
+  enabled_for: [pooled]
+  formula: "w_i = N_train / (S_present * n_s_train)"
+  normalise_mean_to_one: true
+  strata_variable: cohort_histology
+  equal_total_weight_tolerance: 1.0e-9
+  mean_weight_tolerance: 1.0e-9
+  missing_stratum_policy: divide_by_strata_present   # verified never taken
+  # calibration must NOT be reweighted - the frozen Phase-7A rule
+  apply_to: [elastic_net_stage1, elastic_net_capped_refit, mrmr_ridge, fusion_stacker]
+  never_apply_to: [platt_calibration]
+
+# ---------------------------------------------------------------------------
+# MODELS - low capacity.  A1 and A2 share ONE procedure; only the region
+# differs.  There is deliberately no per-region hyperparameter block.
+# ---------------------------------------------------------------------------
+models:
+
+  # the single shared radiomics procedure used by BOTH A1 and A2
+  radiomics:
+    max_selected_features: 8
+    selector_families: [elastic_net, mrmr]
+
+    elastic_net:
+      estimator: LogisticRegression
+      penalty: elasticnet
+      solver: saga
+      max_iter: 20000
+      tol: 1.0e-4
+      random_state: 42
+      grid:
+        l1_ratio: [0.25, 0.50, 0.75, 0.90]
+        C: [0.001, 0.003, 0.01, 0.03, 0.1, 0.3, 1.0, 3.0]
+      feature_cap:
+        max_features: 8
+        rank_by: absolute_coefficient
+        tie_break: lowest_feature_index
+        refit: same_estimator_same_hyperparameters_same_weights
+        zero_selection: weighted_prior_probability_constant
+
+    mrmr:
+      # the already audited deterministic continuous implementation
+      implementation: "src/feature_selection.py::mrmr_rank"
+      criterion: FCD_difference               # Ding & Peng (2003)
+      relevance: anova_f_statistic
+      redundancy: mean_absolute_pearson_correlation
+      tie_break: lowest_feature_index
+      zero_variance_relevance: 0.0
+      zero_variance_correlation: 0.0
+      unit: patient
+      k: [5, 8]
+      # PROTOCOL 3.1: fixed, NOT tuned.  Identical to the Phase-7A secondary mRMR.
+      estimator: LogisticRegression
+      penalty: l2
+      solver: lbfgs
+      C: 1.0
+      max_iter: 20000
+      tol: 1.0e-6
+      random_state: 42
+
+    selection:
+      objective: mean_inner_cv_roc_auc
+      tie_tolerance: 1.0e-6
+      tie_break:
+        - fewer_selected_features
+        - simpler_selector_mrmr_before_elastic_net
+        - stronger_regularization_smaller_C_then_smaller_l1_ratio
+        - deterministic_lexical_candidate_id
+
+  A1:
+    name: whole_gtv_global_radiomics
+    region: gtv
+    procedure: radiomics
+
+  A2:
+    name: whole_rim_global_radiomics
+    region: rim
+    procedure: radiomics          # ONLY the region changes.  No separate grid.
+
+  A3:
+    name: gtv_rim_low_capacity_late_fusion
+    components: [A1, A2]
+    inputs: [P_ADC_GTV, P_ADC_RIM]
+    input_scale: probability
+    estimator: LogisticRegression
+    penalty: l2
+    solver: lbfgs
+    C: 1.0
+    max_iter: 20000
+    tol: 1.0e-6
+    random_state: 42
+    fusion_training_inputs: inner_oof_only
+    inner_oof_rule: same_inner_folds_over_fusion_inputs
+    weighting: source_balanced_for_pooled_class_balanced_for_transfer
+
+# ---------------------------------------------------------------------------
+# CALIBRATION AND THRESHOLD - inner-OOF of the training partition only.
+# ---------------------------------------------------------------------------
+calibration:
+  method: platt
+  input: logit_of_inner_oof_probability
+  clip: 1.0e-6
+  estimator: LogisticRegression
+  solver: lbfgs
+  C: 1.0e6
+  class_weight: null            # a calibrator must NOT be class-reweighted
+  sample_weight: null           # ... nor stratum-weighted
+  max_iter: 20000
+  random_state: 42
+  on_invalid_fit: identity_map_recorded_as_defect
+
+threshold:
+  objective: balanced_accuracy
+  candidates: unique_calibrated_inner_oof_probabilities
+  tie_break: closest_to_0.5
+  legacy_threshold: 0.5         # SECONDARY comparison only
+
+# ---------------------------------------------------------------------------
+# EVALUATION
+# ---------------------------------------------------------------------------
+evaluation:
+  unit: patient
+  key: PatientKey
+  positive_class: 1
+  # PROTOCOL 9.1 - FROZEN BEFORE MODELLING.  Differs deliberately from
+  # Phase 7A, whose report is NOT altered.
+  primary_probability: raw
+  report_calibrated: true
+  views:
+    - {id: 1, name: source_stratified_multicenter_oof, n: 343}
+    - {id: 2, name: cohort_specific_oof_no_retraining, subsets: [LUNG1, RADIOGENOMICS]}
+    - {id: 3, name: true_cross_cohort_transport, directions: [lung1_to_radiogenomics,
+                                                              radiogenomics_to_lung1]}
+  metrics:
+    raw: [roc_auc, pr_auc]
+    calibrated_thresholded: [balanced_accuracy, sensitivity_adc, specificity,
+                             precision, f1, mcc, accuracy, brier]
+    calibration: [calibration_slope, calibration_intercept]
+  bootstrap:
+    n_resamples: 5000
+    unit: patient
+    ci: 0.95
+    pooled_scheme: source_stratified      # resample within LUNG1 and within RG
+    pooled_sizes: {LUNG1: 202, RADIOGENOMICS: 141}
+    transfer_scheme: within_target_cohort
+    comparisons:
+      - {tag: pooled_A3_minus_A1, a: A3, b: A1, scope: pooled, seed: 20260961}
+      - {tag: pooled_A3_minus_A2, a: A3, b: A2, scope: pooled, seed: 20260962}
+      - {tag: l1_to_rg_A3_minus_A1, a: A3, b: A1, scope: lung1_to_radiogenomics, seed: 20260963}
+      - {tag: l1_to_rg_A3_minus_A2, a: A3, b: A2, scope: lung1_to_radiogenomics, seed: 20260964}
+      - {tag: rg_to_l1_A3_minus_A1, a: A3, b: A1, scope: radiogenomics_to_lung1, seed: 20260965}
+      - {tag: rg_to_l1_A3_minus_A2, a: A3, b: A2, scope: radiogenomics_to_lung1, seed: 20260966}
+
+# ---------------------------------------------------------------------------
+# BATCH-EFFECT DIAGNOSTIC - label-free.  Cohort identity ONLY.
+# NOT a disease classifier.  Nothing is harmonised.
+# ---------------------------------------------------------------------------
+domain_diagnostic:
+  enabled: true
+  target: cohort_identity           # LUNG1 vs RADIOGENOMICS
+  never_uses_histology: true
+  regions: [gtv, rim]
+  estimator: LogisticRegression
+  penalty: l2
+  solver: lbfgs
+  class_weight: balanced
+  C_grid: [0.001, 0.003, 0.01, 0.03, 0.1, 0.3, 1.0, 3.0]
+  max_iter: 20000
+  random_state: 42
+  cv:
+    n_splits: 5
+    shuffle: true
+    random_state: 42
+    stratify_by: cohort
+  report: pooled_oof_roc_auc
+
+prediction_shift_diagnostic:
+  enabled: true
+  computed_after_predictions_are_frozen: true
+  never_used_for_tuning: true
+  strata: [ADC, SCC]
+  statistics: [median, iqr, difference, cliffs_delta]
+
+harmonisation:
+  combat: false                 # PROTOCOL 11.2 - not run, and not implemented
+  reason: "two cohorts with reversed prevalence: batch and outcome are confounded"
+
+# ---------------------------------------------------------------------------
+# REFERENCE COMPARISONS - read from disk, NEVER retrained, never a gate.
+# ---------------------------------------------------------------------------
+references:
+  phase7a_A3:
+    predictions: predictions/phase7a/A3_fusion_oof.csv
+    expected_roc_auc_calibrated: 0.5371
+    expected_roc_auc_raw: 0.5355
+  phase7a_A1:
+    predictions: predictions/phase7a/A1_gtv_oof.csv
+    expected_roc_auc_calibrated: 0.5665
+  phase7a_A2:
+    predictions: predictions/phase7a/A2_rim_oof.csv
+    expected_roc_auc_calibrated: 0.5614
+  phase6b_attention:
+    predictions: predictions/phase6b_cnn_attention_oof.csv
+    expected_roc_auc: 0.6146
+    note: "reference only - NOT retrained, and no CNN enters Phase 8B"
+
+# ---------------------------------------------------------------------------
+# GATE 8B - frozen before modelling.  All five conditions must pass.
+# All ROC-AUCs here are computed on the RAW probability (protocol 9.1).
+# ---------------------------------------------------------------------------
+gate_8b:
+  rule: AND
+  probability: raw
+  conditions:
+    - {id: 1, metric: pooled_A3_roc_auc,          operator: ">=", value: 0.65}
+    - {id: 2, metric: lung1_subset_A3_roc_auc,    operator: ">=", value: 0.60}
+    - {id: 3, metric: radiogenomics_subset_A3_roc_auc, operator: ">=", value: 0.60}
+    - {id: 4, metric: A3_folds_beating_both_A1_and_A2, operator: ">=", value: 3, of: 5}
+    - {id: 5, metric: mean_bidirectional_transport_A3_roc_auc, operator: ">=", value: 0.60,
+       and_also: {metric: min_direction_A3_roc_auc, operator: ">=", value: 0.55}}
+  on_fail: "STOP. Phase 8C is NOT authorised. No local attention, no CNN fusion, no further tuning."
+  on_pass: "Phase 8C is authorised but MUST NOT be implemented in this session. Not an external validation."
+
+# ---------------------------------------------------------------------------
+# EXPECTED regressions in the frozen earlier suites, declared in advance.
+# tests/test_phase8b.py asserts these are the ONLY failures and that each
+# failure detail contains exclusively phase8b paths.
+# ---------------------------------------------------------------------------
+expected_superseded_checks:
+  - {suite: tests/test_phase8a.py, check: 35, reason: "asserts no Phase-8B artefact exists"}
+  - {suite: tests/test_phase7a.py, check: 38, reason: "namespace walk over shared top-level dirs"}
+
+reproducibility:
+  seed: 42
+  numpy_seed: 42
+  python_seed: 42
+  device: cpu

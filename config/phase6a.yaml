@@ -1,0 +1,157 @@
+# Phase 6A - learned CT patch representation (2.5D crops + frozen ImageNet ResNet18).
+#
+# Phase 6A replaces the HANDCRAFTED patch representation with a LEARNED one and
+# changes NOTHING else.  The cohort, the outer split, the ROI, the resampled
+# grid and the patch centres are all reused verbatim from the frozen Phase-4
+# products.  No ADC/SCC classifier is trained in this phase.
+#
+# Every scientific parameter lives here, never in code.
+
+experiment:
+  name: gtv_rim_2p5d_learned_representation
+  phase: 6a
+  roi: gtv_rim
+  roi_filename: ROI_E_GTV_Rim.nii.gz
+
+# ---------------------------------------------------------------------------
+# FROZEN INPUTS.  Read-only for Phase 6A: nothing below is ever rewritten.
+# ---------------------------------------------------------------------------
+source:
+  features_dir: patch_features/gtv_rim
+  splits_file: splits/gtv_rim_stratified_5fold.csv
+  splits_meta_file: splits/gtv_rim_stratified_5fold_meta.json
+  cohort_file: cohort/gtv_rim_cohort.csv
+  feature_names_file: config/feature_names.txt
+  expected_patients: 202
+  expected_adc: 51
+  expected_scc: 151
+  expected_patches: 37464
+  expected_extraction_signature: "9825ed13538ee681"
+  expected_split_sha256: "89dc0b619dd1a2dc2057ead9a91ac1aa4d2f2d9a1bec65f0c7106831a5eae021"
+
+paths:
+  # READ-ONLY external inputs, identical to Phase 4
+  vuong_root: "D:/User/Documents/L.U.N.G/Vuong5ROI/outputs/full_cohort"
+  ct_filename: CT.nii.gz
+  gtv_filename: ROI_A_GTV.nii.gz
+
+# ---------------------------------------------------------------------------
+# Resampling.  COPIED VERBATIM from config/gtv_rim_experiment.yaml so that the
+# Phase-6A CT grid is bit-for-bit the grid the frozen patch centres index into.
+# Verified per patient against grid_size / grid_spacing / grid_origin /
+# grid_direction stored inside every frozen bag.
+# ---------------------------------------------------------------------------
+preprocessing:
+  resample_spacing_mm: [2.0, 2.0, 2.0]
+  ct_interpolator: linear
+  mask_interpolator: nearest
+  ct_default_value: -1024.0
+
+# ---------------------------------------------------------------------------
+# 2.5D crop geometry.  Deterministic, label-independent, never tuned on
+# ADC/SCC performance.
+# ---------------------------------------------------------------------------
+crop:
+  # physical field of view per plane; 64 mm / 2 mm = 32 pixels exactly
+  fov_mm: [64.0, 64.0]
+  image_size: [32, 32]
+  n_channels: 3
+  # channel order is FIXED and is NOT an RGB triple
+  views: [axial, coronal, sagittal]
+  # Index geometry.  All index tuples are (i, j, k) in SimpleITK order; the numpy
+  # volume is indexed [k, j, i].  For a frozen patch centre c = (ci, cj, ck):
+  #     window start along an axis = c - image_size // 2  = c - 16
+  #     window spans 32 samples, so the centre voxel c lands at OUTPUT INDEX 16
+  # The 32-pixel window is even, so its geometric midpoint is at index c - 0.5,
+  # i.e. 1.0 mm from the patch centre.  This offset is identical for every axis,
+  # every view and every instance, so all three planes intersect at exactly the
+  # same voxel c and therefore at exactly the same physical point.
+  centre_offset_voxels: 16
+  # channel 0 axial   : fixed k = ck; rows = j ascending, cols = i ascending
+  # channel 1 coronal : fixed j = cj; rows = k ascending, cols = i ascending
+  # channel 2 sagittal: fixed i = ci; rows = k ascending, cols = j ascending
+  # No cosmetic flips are applied to the stored arrays.  Display-only flips are
+  # applied in the QA figures and are documented there.
+  view_axes:
+    axial:    {fixed: k, row: j, col: i}
+    coronal:  {fixed: j, row: k, col: i}
+    sagittal: {fixed: i, row: k, col: j}
+  # HU handling: clip first, then round to nearest, then cast.
+  hu_clip: [-1024, 200]
+  pad_value_hu: -1024
+  pad_rule: "constant -1024 HU wherever the 64 mm window leaves the resampled CT volume; the instance is ALWAYS kept"
+  dtype: int16
+  rounding: rint
+
+# ---------------------------------------------------------------------------
+# Frozen pretrained encoder.  Never trained, never fine-tuned, never given a label.
+# ---------------------------------------------------------------------------
+encoder:
+  framework: torchvision
+  architecture: resnet18
+  weights_enum: "ResNet18_Weights.IMAGENET1K_V1"
+  weights_file: "resnet18-f37072fd.pth"
+  weights_url: "https://download.pytorch.org/models/resnet18-f37072fd.pth"
+  weights_sha256_prefix: "f37072fd"
+  # ImageNet-1K top-1 76 % is ResNet50; ResNet18 IMAGENET1K_V1 is acc@1 69.758
+  expected_acc1: 69.758
+  removed_head: fc
+  head_replacement: identity
+  embedding_dim: 512
+  requires_grad: false
+  eval_mode: true
+  allow_random_init: false     # FAIL LOUDLY if pretrained weights are unavailable
+  local_weights_path: null     # optional manually supplied checkpoint (Kaggle offline)
+
+# ---------------------------------------------------------------------------
+# CNN input transform.  Applied identically to every instance of every patient,
+# so it cannot carry label information.
+# ---------------------------------------------------------------------------
+transform:
+  id: "hu[-1024,200]->[0,1] | resize 32->224 bilinear align_corners=False antialias=False | imagenet z-score"
+  hu_to_unit_range: [-1024.0, 200.0]
+  resize_to: [224, 224]
+  resize_mode: bilinear
+  align_corners: false
+  antialias: false
+  normalize_mean: [0.485, 0.456, 0.406]
+  normalize_std: [0.229, 0.224, 0.225]
+
+runtime:
+  device: auto              # cuda if available, else cpu.  NEVER hard-coded.
+  batch_size: 32
+  min_batch_size: 4         # halved on CUDA OOM down to this floor, then CPU
+  num_workers: 0
+  seed: 42
+
+# ---------------------------------------------------------------------------
+# Pilot: 3 ADC / 3 SCC, smallest / median / largest bags, left and right lungs,
+# and the two patients that require -1024 HU padding.
+# ---------------------------------------------------------------------------
+pilot:
+  patients:
+    - LUNG1-017   # SCC,   8 patches - smallest bag in the cohort, Gradient-excluded
+    - LUNG1-114   # ADC, 136 patches - cohort median bag, right lung
+    - LUNG1-015   # ADC, 267 patches - 5 padded instances, superior tumour
+    - LUNG1-050   # SCC, 633 patches - 42 padded instances, the most in the cohort
+    - LUNG1-140   # ADC, 858 patches - 2nd largest bag, left lung
+    - LUNG1-153   # SCC, 900 patches - largest bag in the cohort, left lung
+  qa_instances_per_patient: 6
+  # deterministic instance choice, no RNG: padded instances first (at most 2),
+  # then evenly spaced patch indices over the remaining instances
+  qa_selection: padded_first_then_evenly_spaced
+  qa_max_padded_shown: 2
+
+outputs:
+  image_dir: image_patches/gtv_rim_2p5d
+  embedding_dir: cnn_embeddings/gtv_rim_resnet18
+  qa_dir: qa/phase6a
+  image_manifest: reports/phase6a_image_manifest.csv
+  embedding_manifest: reports/phase6a_embedding_manifest.csv
+  image_run_json: reports/phase6a_image_run.json
+  embedding_run_json: reports/phase6a_embedding_run.json
+  pilot_check_json: reports/phase6a_pilot_check.json
+  tests_json: reports/phase6a_tests.json
+  pre_snapshot: reports/phase6a_pre_snapshot.json
+  image_log: logs/phase6a_image_extraction.log
+  embedding_log: logs/phase6a_embeddings.log

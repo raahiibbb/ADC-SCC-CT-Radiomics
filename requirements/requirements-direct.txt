@@ -1,0 +1,24 @@
+# Direct, deliberately pinned dependencies for the ADC_SCC_MIL Phase-1 environment.
+# Python 3.9 is REQUIRED: PyRadiomics 3.1.0 publishes binary wheels only for
+# cp37/cp38/cp39 (win_amd64) and needs the NumPy 1.x C ABI. No C toolchain is
+# present on this machine, so a source build is not an option.
+# The interpreter is a standalone CPython 3.9.25 fetched by `uv`; the existing
+# Vuong5ROI Python 3.14 environment is NOT usable for PyRadiomics.
+numpy==1.26.4          # must stay <2 for the PyRadiomics C extensions
+SimpleITK==2.3.1
+pyradiomics==3.1.0
+scipy==1.13.1
+scikit-learn==1.5.2
+pandas==2.2.3
+matplotlib==3.9.4
+PyYAML==6.0.2
+nibabel==5.2.1
+pykwalify==1.8.0
+six==1.17.0
+tqdm==4.67.1
+
+# Phase 3 (MIL modelling) addition. CPU wheel, installed with:
+#   .venv/Scripts/python.exe -m ensurepip --upgrade
+#   .venv/Scripts/python.exe -m pip install "torch==2.6.0+cpu" --index-url https://download.pytorch.org/whl/cpu
+# 2.6.0 is the newest release with cp39 win_amd64 wheels; it keeps numpy 1.26.4.
+torch==2.6.0+cpu

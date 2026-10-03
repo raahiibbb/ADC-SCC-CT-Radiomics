@@ -1,0 +1,32 @@
+# ===========================================================================
+# Phase 12 - data scale-up: NLST (screening, expert Sybil boxes) as a 4th
+# training site + TCGA-LUAD/LUSC as a LOCKED external test (scored once, Phase 14).
+# User-authorised 2026-09-26: ~55 GB download to C:/LUNG_phase12.
+# ===========================================================================
+
+root: "C:/LUNG_phase12"
+idc_version: v22                     # index used for series metadata/sizes
+s5cmd: ".venv-phase10/Lib/site-packages/s5cmd/bin/s5cmd.exe"
+
+nlst:
+  sybil_manifest: "C:/LUNG_phase12/nlst_sybil-idc_v23-aws.s5cmd"   # Zenodo 10.5281/zenodo.15643335
+  sr_dir: "C:/LUNG_phase12/nlst_sybil_sr"
+  clinical_canc: "C:/Users/User/AppData/Local/IDC/IDC/v22/clinical_data/nlst_canc/000000000000.parquet"
+  clinical_prsn: "C:/Users/User/AppData/Local/IDC/IDC/v22/clinical_data/nlst_prsn/000000000000.parquet"
+  # ICD-O-3 morphology (lc_morph) of the FIRST lung cancer (lc_order == 1)
+  adc_codes: [8140, 8200, 8230, 8250, 8251, 8252, 8253, 8254, 8255, 8260, 8310, 8323, 8480, 8481, 8490, 8550, 8551]
+  scc_codes: [8052, 8070, 8071, 8072, 8073, 8074, 8075, 8076, 8083, 8084]
+  exclude_multiple_cancers: true     # the annotated lesion could belong to another primary
+  # series choice (annotation metadata only): latest screening time point that
+  # has boxes (closest to diagnosis); ties -> most annotated slices.
+  max_series_mb: 400
+
+tcga:
+  collections: [tcga_luad, tcga_lusc]  # label = collection (LUAD=ADC, LUSC=SCC)
+  locked: true                         # labels are NOT read before Phase 14
+  # series choice: thinnest axial CT of the first study with >= 60 images
+  min_images: 60
+  max_series_mb: 400
+
+autoseg:
+  threshold_hu: -750                   # frozen from Phase 11 (chosen on expert GTVs, no labels)

@@ -1,0 +1,94 @@
+# Phase 3B - robustness revision of the MODEL-SELECTION procedure only.
+#
+# Everything scientific below is copied unchanged from config/phase3.yaml:
+# frozen bags, frozen outer split, 74 features, both models, 74->64->32 encoder,
+# dropout 0.2, Adam lr 1e-3, weight_decay 1e-4, weighted BCE, ADC positive,
+# max 100 epochs, no SMOTE, patient-level supervision, threshold 0.5.
+#
+# The ONLY change: the single 23-patient inner validation split with
+# patience-based early stopping is replaced by stratified 3-fold inner CV over
+# the outer-training patients, epoch selection on the mean inner-CV ROC-AUC, and
+# a from-scratch refit on ALL outer-training patients for the selected epoch.
+
+phase3:
+  name: gradient_mil_3b
+  roi: gradient
+  # frozen, read-only inputs - identical to Phase 3
+  features_dir: patch_features/gradient
+  splits_file: splits/stratified_5fold.csv
+  splits_meta_file: splits/stratified_5fold_meta.json
+  feature_names_file: config/feature_names.txt
+  cohort_file: cohort/gradient_cohort.csv
+  expected_patients: 194
+  expected_adc: 49
+  expected_scc: 145
+  expected_features: 74
+  expected_extraction_signature: "04f11c6b6eb993a7"
+
+inner_cv:
+  # stratified K-fold over the OUTER TRAIN patients, used only to choose an epoch
+  n_splits: 3
+  shuffle: true
+  # fold-specific seed = base_seed + outer_fold
+  base_seed: 3000
+  # every inner run walks the full epoch budget; the curve, not a patience
+  # counter, decides the epoch
+  epoch_selection: mean_inner_cv_roc_auc
+  tie_break: lowest_epoch
+
+preprocessing:
+  # unchanged rule; applied to inner-training patches during epoch selection and
+  # to ALL outer-training patches for the final refit
+  variance:
+    absolute_std_threshold: 1.0e-8
+    relative_std_threshold: 1.0e-8
+    eps: 1.0e-12
+  standardize: zscore
+
+model:
+  input_dim: 74
+  encoder_hidden: [64, 32]
+  activation: relu
+  dropout: 0.2
+  attention_hidden: 32
+  pooling:
+    mean_mil: mean
+    attention_mil: gated_attention
+
+training:
+  optimizer: adam
+  learning_rate: 1.0e-3
+  weight_decay: 1.0e-4
+  max_epochs: 100
+  bags_per_batch: 1
+  loss: weighted_bce_with_logits
+  pos_weight_source: training_patient_counts   # inner-train during selection, outer-train for the refit
+  device: cpu
+  # NO early stopping in Phase 3B - superseded by inner-CV epoch selection
+  early_stopping_patience: null
+
+seeds:
+  python: 42
+  numpy: 42
+  torch: 42
+  # inner-CV run seed  = inner_base_seed + 100*outer_fold + 10*inner_fold + model_offset
+  inner_base_seed: 4000
+  # final refit seed   = final_base_seed + 10*outer_fold + model_offset
+  final_base_seed: 5000
+  deterministic_torch: true
+
+evaluation:
+  threshold: 0.5
+  positive_class: 1
+  small_bag_threshold: 20
+
+outputs:
+  model_suffix: "_3b"                       # keeps every Phase-3 artefact intact
+  models_dir: models
+  predictions_dir: predictions
+  attention_dir: attention/gradient_3b
+  results_dir: results/phase3b
+  inner_splits_dir: splits/inner_cv
+  preprocessing_dir: preprocessing/gradient_3b
+  reports_dir: reports
+  run_json: reports/phase3b_run.json

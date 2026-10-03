@@ -1,0 +1,42 @@
+# PyRadiomics parameter file — Phase 1 Gradient local patches.
+# Image and mask are ALREADY resampled to 2x2x2 mm by the pipeline, so
+# resampledPixelSpacing is deliberately null (no second resampling).
+imageType:
+  Original: {}
+
+featureClass:
+  firstorder:
+  glcm:
+  glrlm:
+  glszm:
+
+setting:
+  # --- geometry ---
+  resampledPixelSpacing:            # null: already resampled upstream
+  interpolator: sitkBSpline
+  force2D: false
+  padDistance: 5
+  geometryTolerance: 0.0001
+  correctMask: false
+
+  # --- intensity ---
+  normalize: false
+  removeOutliers:
+  resegmentRange: [-1024, 200]
+  resegmentMode: absolute
+  resegmentShape: false
+
+  # --- discretisation ---
+  binWidth: 20
+
+  # --- ROI ---
+  label: 1
+  minimumROIDimensions: 2
+  minimumROISize:
+
+  # --- misc ---
+  additionalInfo: false
+  preCrop: false
+  distances: [1]
+  symmetricalGLCM: true
+  weightingNorm:

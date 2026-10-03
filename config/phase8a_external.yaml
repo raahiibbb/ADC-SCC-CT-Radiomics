@@ -1,0 +1,324 @@
+# ===========================================================================
+# Phase 8A - external NSCLC-Radiogenomics cohort construction.
+#
+# PURPOSE.  Build an UNTOUCHED external ADC-vs-SCC cohort and prepare it for a
+# LATER, LOCKED external test.  Phase 8A is NOT a model-development phase.
+#
+# HARD RULES, enforced by tests/test_phase8a.py:
+#   * NO classification metric of any kind is computed here (no AUC, PR-AUC,
+#     accuracy, confusion matrix, threshold, calibration, ...).
+#   * NO model is trained, fitted or selected on these patients.
+#   * The external histology label is used for EXACTLY TWO things: deciding
+#     ADC/SCC eligibility, and recording the ground truth for the later test.
+#     It never touches a feature, a preprocessing choice, a model, a threshold
+#     or a comparison.
+#   * NO LUNG1 artefact is modified.  Dataset/ and Vuong5ROI/ stay read-only.
+#   * Phase 8B is NOT authorised by this config and no code for it exists.
+#
+# Every scientific parameter lives in this file.  Nothing scientific is
+# hard-coded in src/phase8a_*.py.
+# ===========================================================================
+
+experiment:
+  name: phase8a_external_nsclc_radiogenomics
+  phase: 8A
+  authorised_scope: [download, eligibility, masks, preprocessing_compatibility,
+                     global_features, patch_sampling, cnn_embeddings, qa,
+                     provenance, batch_descriptors]
+  forbidden_scope: [classification_metrics, model_training, model_selection,
+                    threshold_selection, calibration, feature_selection,
+                    combat, phase8b]
+  positive_class: adenocarcinoma        # ADC = 1, identical to LUNG1
+
+# ---------------------------------------------------------------------------
+# SOURCE - TCIA NSCLC Radiogenomics.  Public, CC BY 3.0.
+# ---------------------------------------------------------------------------
+source:
+  collection: "NSCLC Radiogenomics"     # the exact TCIA collection string
+  collection_doi: "https://doi.org/10.7937/K9/TCIA.2017.7hs46erv"
+  nbia_api: "https://services.cancerimagingarchive.net/nbia-api/services/v1"
+  clinical_csv_url: "https://www.cancerimagingarchive.net/wp-content/uploads/NSCLCR01Radiogenomic_DATA_LABELS_2018-05-22_1500-shifted.csv"
+  clinical_csv_name: "NSCLCR01Radiogenomic_DATA_LABELS_2018-05-22_1500-shifted.csv"
+  # Literature CONTEXT ONLY.  These are NOT acceptance targets and no check
+  # asserts them; eligibility is re-derived from the downloaded cohort.
+  literature_context:
+    total_subjects_reported: 211
+    yang_2021_eligible_adc: 112
+    yang_2021_eligible_scc: 28
+    note: "context only - never an acceptance criterion"
+  download:
+    timeout_s: 900
+    retries: 3
+    retry_sleep_s: 5
+    # raw DICOM is streamed through a working directory and deleted after
+    # conversion; only the tiny SEG zips are retained for reproducibility
+    keep_seg_zip: true
+    keep_ct_dicom: false
+
+# ---------------------------------------------------------------------------
+# ELIGIBILITY - deterministic, applied to every downloaded subject.  Never
+# manual, never image-based, never difficulty-based.
+# ---------------------------------------------------------------------------
+eligibility:
+  histology_column: "Histology "        # the clinical CSV's literal column name
+  case_id_column: "Case ID"
+  histology_map:
+    "Adenocarcinoma": 1                 # ADC = positive class, as in LUNG1
+    "Squamous cell carcinoma": 0
+  # every other histology string is excluded with its own reason code
+  rules:
+    - id: histology_adc_or_scc
+      description: "Histology explicitly Adenocarcinoma or Squamous cell carcinoma"
+    - id: has_tumour_segmentation
+      description: "Exactly one DICOM SEG series carrying a usable primary-tumour segment"
+    - id: segmentation_maps_to_one_ct
+      description: "The SEG references exactly one CT series that exists in the collection"
+    - id: ct_readable
+      description: "The CT series reads with one orientation, one in-plane size, one pixel spacing and at least two monotonic slice positions"
+    - id: segmentation_alignment
+      description: "SEG rows/columns equal the CT rows/columns and every non-empty SEG frame maps to a CT slice"
+    - id: segmentation_non_empty
+      description: "The mapped primary-tumour mask has at least min_gtv_voxels voxels"
+    - id: unambiguous_subject_mapping
+      description: "Exactly one clinical row, one SEG series and one referenced CT series for the subject"
+  min_gtv_voxels: 10                    # the Vuong5ROI threshold, reused
+  max_unmapped_seg_frames: 0            # any unmapped non-empty frame is fatal
+  # Primary-tumour segment identification inside the SEG object.
+  #
+  # MEASURED FACT about this collection, recorded before any mask was built:
+  # all 144 SEG objects carry EXACTLY ONE segment and reference EXACTLY ONE CT
+  # series of the same subject.  Their coded identification is unusable - the
+  # SegmentLabel / SegmentedPropertyType values are unedited 3D Slicer template
+  # defaults ("Heart" 87x, "Tissue" 56x, "upper arm" 1x) and carry no anatomical
+  # meaning.  The collection documentation states these objects are the primary
+  # tumour segmentation.  Identification therefore rests on the single-segment
+  # rule, NOT on the labels, and the choice is verified downstream by the
+  # geometric plausibility checks and the visual QA rather than trusted.
+  tumour_segment:
+    accept_single_segment: true         # a SEG with exactly one segment IS that segment
+    reject_if_ambiguous: true           # >1 segment -> excluded, never guessed at
+    coded_labels_are_reliable: false
+    observed_labels: ["Heart", "Tissue", "Segmentation"]
+    # used only if a future SEG carries more than one segment
+    property_types: ["Neoplasm, Primary", "Neoplasm", "Nodule", "Tumor", "Mass"]
+
+# ---------------------------------------------------------------------------
+# CT SERIES SELECTION - deterministic.  The SEG's own ReferencedSeriesSequence
+# is the ONLY source of truth; no CT is chosen by inspecting images.
+# ---------------------------------------------------------------------------
+ct_selection:
+  rule: referenced_series_sequence_only
+  require_modality: CT
+  min_slices: 2
+  slice_spacing_tolerance_mm: 0.01
+
+# ---------------------------------------------------------------------------
+# REGIONS - the LUNG1 (Vuong et al. 2020) definitions, reproduced exactly.
+#   GTV      = the primary-tumour SEG mask, on the native CT grid
+#   GTV+Rim  = (signed distance to GTV <= 8 mm) OR GTV
+#   Rim      = GTV+Rim MINUS GTV
+# The signed distance field is the validated `fine_levelset_edt` method of
+# Vuong5ROI/src/vuong5roi/geometry.py: the binary mask is linearly interpolated
+# onto a 1 mm isotropic grid, its 0.5 iso-level taken as the surface, the
+# Euclidean distance computed there and sampled back at native voxel centres.
+# Physical millimetres, fully 3D, spacing/origin/direction aware, never
+# voxel-count based and never per-slice.
+# ---------------------------------------------------------------------------
+regions:
+  expansion_mm: 8.0
+  distance_method: fine_levelset_edt
+  fine_grid_mm: 1.0
+  crop_margin_rule: "expansion_mm + 4 * max(voxel size mm)"
+  cleaning_enabled: false               # LUNG1 Phases 4-7A used the RAW masks
+  verification:
+    require_disjoint: true                 # GTV n Rim = empty
+    require_union_equals_gtv_rim: true     # GTV u Rim = GTV+Rim
+    require_gtv_subset_of_gtv_rim: true
+    require_masks_match_ct_geometry: true
+    min_region_voxels: 1
+
+# ---------------------------------------------------------------------------
+# PREPROCESSING - copied verbatim from config/gtv_rim_experiment.yaml and
+# config/phase7a.yaml.  NOT tuned, NOT re-derived, NOT chosen on this cohort.
+# ---------------------------------------------------------------------------
+preprocessing:
+  resample_spacing_mm: [2.0, 2.0, 2.0]
+  ct_interpolator: linear
+  mask_interpolator: nearest
+  ct_default_value: -1024.0
+
+# ---------------------------------------------------------------------------
+# GLOBAL RADIOMICS - the Phase-7A bank, unchanged.  Extraction is
+# label-independent, so the FULL external bank may be extracted; NO feature
+# selection is performed on these patients.
+# ---------------------------------------------------------------------------
+global_radiomics:
+  params_file: config/phase7a_pyradiomics.yaml
+  expected_phase7a_signature: "9666c1a165292d6f"
+  bin_width: 20
+  resegment_range: [-1024, 200]
+  resegment_mode: absolute
+  image_types: [Original, LoG, Wavelet]
+  log_sigma_mm: [2.0, 3.0, 4.0]
+  wavelet_level: 1
+  wavelet_name: coif1
+  feature_classes: [shape, firstorder, glcm, glrlm, glszm, gldm, ngtdm]
+  rim_feature_classes: [firstorder, glcm, glrlm, glszm, gldm, ngtdm]
+  drop_column_prefixes: [diagnostics_]
+  inf_policy: convert_to_nan_at_load
+
+# ---------------------------------------------------------------------------
+# LOCAL PATCH SAMPLING - the FROZEN Phase-4 GTV+Rim sampler.
+#
+# The values below are copied verbatim from config/gtv_rim_experiment.yaml.
+# Phase 8A does not re-implement the sampler: src/phase8a_patches.py imports
+# and calls the frozen src/extract_patient.py, so the external instances are
+# produced by literally the same code path.  The extraction signature is a hash
+# over exactly these keys, so an identical signature is machine proof that the
+# external and LUNG1 samplers are the same algorithm with the same parameters.
+# ---------------------------------------------------------------------------
+patch_sampling:
+  roi: gtv_rim
+  roi_filename: ROI_E_GTV_Rim.nii.gz
+  expected_extraction_signature: "9825ed13538ee681"   # the frozen LUNG1 GTV+Rim signature
+  size_voxels: [5, 5, 5]
+  stride_voxels: [5, 5, 5]
+  grid_anchor: image_origin
+  require_full_in_bounds: true
+  require_center_in_roi: true
+  min_roi_voxels: 27
+  local_radiomics:
+    params_file: config/radiomics_params.yaml
+    bin_width: 20
+    resegment_range: [-1024, 200]
+    resegment_mode: absolute
+    image_types: [Original]
+    feature_classes: [firstorder, glcm, glrlm, glszm]
+    shape_features: false
+    n_features: 74
+
+# ---------------------------------------------------------------------------
+# 2.5D CNN REPRESENTATION - the FROZEN Phase-6A crop geometry and the FROZEN
+# Phase-6A encoder.  Copied verbatim from config/phase6a.yaml.  No classifier
+# is run on these embeddings in Phase 8A.
+# ---------------------------------------------------------------------------
+crop:
+  fov_mm: [64.0, 64.0]
+  image_size: [32, 32]
+  n_channels: 3
+  views: [axial, coronal, sagittal]
+  centre_offset_voxels: 16
+  view_axes:
+    axial:    {fixed: k, row: j, col: i}
+    coronal:  {fixed: j, row: k, col: i}
+    sagittal: {fixed: i, row: k, col: j}
+  hu_clip: [-1024, 200]
+  pad_value_hu: -1024
+  pad_rule: "constant -1024 HU wherever the 64 mm window leaves the resampled CT volume; the instance is ALWAYS kept"
+  dtype: int16
+  rounding: rint
+  expected_phase6a_crop_signature: "49756d388a80414f"
+
+encoder:
+  framework: torchvision
+  architecture: resnet18
+  weights_enum: "ResNet18_Weights.IMAGENET1K_V1"
+  weights_file: "resnet18-f37072fd.pth"
+  weights_url: "https://download.pytorch.org/models/resnet18-f37072fd.pth"
+  weights_sha256_prefix: "f37072fd"
+  expected_acc1: 69.758
+  removed_head: fc
+  head_replacement: identity
+  embedding_dim: 512
+  requires_grad: false
+  eval_mode: true
+  allow_random_init: false
+  local_weights_path: null
+  expected_state_fingerprint: "b6e132d398763cadd5e66a4e994f5a5eb6cf7bd415eb7e8fae476475f749ffe2"
+
+transform:
+  id: "hu[-1024,200]->[0,1] | resize 32->224 bilinear align_corners=False antialias=False | imagenet z-score"
+  hu_to_unit_range: [-1024.0, 200.0]
+  resize_to: [224, 224]
+  resize_mode: bilinear
+  align_corners: false
+  antialias: false
+  normalize_mean: [0.485, 0.456, 0.406]
+  normalize_std: [0.229, 0.224, 0.225]
+  expected_phase6a_transform_signature: "7d52e0dac8a4438d"
+
+runtime:
+  device: auto
+  batch_size: 32
+  min_batch_size: 4
+  num_workers: 0
+  seed: 42
+
+# ---------------------------------------------------------------------------
+# BATCH / DOMAIN-SHIFT DESCRIPTORS - descriptive only.  ComBat is NOT fitted.
+# ---------------------------------------------------------------------------
+batch_descriptors:
+  dicom_tags: [Manufacturer, ManufacturerModelName, SliceThickness, PixelSpacing,
+               ConvolutionKernel, KVP, XRayTubeCurrent, ExposureTime,
+               ContrastBolusAgent, StudyDescription, SeriesDescription,
+               PatientSex, RescaleSlope, RescaleIntercept, Rows, Columns]
+  lung1_reference:
+    geometry_csv: reports/gtv_rim_geometry_check.csv
+    metadata_csv: "D:/User/Documents/L.U.N.G/Dataset/Lung1 clinical/dataset_metadata_master.csv"
+    note: "LUNG1 acquisition descriptors are read from frozen outputs and read-only metadata only"
+  combat: false
+
+# ---------------------------------------------------------------------------
+# QA
+# ---------------------------------------------------------------------------
+qa:
+  visual_patients: 6
+  # deterministic, label-blind: smallest and largest GTV volume, first and last
+  # PatientID, two evenly spaced interior patients of the sorted eligible cohort
+  visual_selection_rule: deterministic_volume_spread
+  window_level: -600
+  window_width: 1600
+  checks:
+    require_no_nan_inf: true
+    require_no_duplicate_patients: true
+    require_ct_mask_geometry_match: true
+    require_patch_lattice_anchor_zero: true
+
+# ---------------------------------------------------------------------------
+# PATHS
+# ---------------------------------------------------------------------------
+paths:
+  external_root: external/nsclc_radiogenomics
+  metadata_dir: external/nsclc_radiogenomics/metadata
+  masks_dir: external/nsclc_radiogenomics/masks
+  global_features_dir: external/nsclc_radiogenomics/global_features
+  patch_features_dir: external/nsclc_radiogenomics/patch_features
+  image_patches_dir: external/nsclc_radiogenomics/image_patches
+  cnn_embeddings_dir: external/nsclc_radiogenomics/cnn_embeddings
+  qa_dir: external/nsclc_radiogenomics/qa
+  cohort_csv: external/nsclc_radiogenomics/cohort.csv
+  exclusions_csv: external/nsclc_radiogenomics/exclusions.csv
+  seg_zip_dir: external/nsclc_radiogenomics/metadata/seg_zip
+  clinical_csv: external/nsclc_radiogenomics/metadata/clinical.csv
+  tcia_patients_json: external/nsclc_radiogenomics/metadata/tcia_patients.json
+  tcia_series_json: external/nsclc_radiogenomics/metadata/tcia_series.json
+  seg_index_json: external/nsclc_radiogenomics/metadata/seg_index.json
+  download_manifest_json: external/nsclc_radiogenomics/metadata/download_manifest.json
+  acquisition_csv: external/nsclc_radiogenomics/metadata/acquisition.csv
+  acquisition_summary_json: external/nsclc_radiogenomics/metadata/acquisition_summary.json
+  region_geometry_csv: external/nsclc_radiogenomics/masks/region_geometry.csv
+  gtv_csv: external/nsclc_radiogenomics/global_features/gtv.csv
+  rim_csv: external/nsclc_radiogenomics/global_features/rim.csv
+  global_cache_dir: external/nsclc_radiogenomics/global_features/cache
+  global_feature_names_json: external/nsclc_radiogenomics/global_features/feature_names.json
+  manifest_csv: reports/phase8a_manifest.csv
+  run_json: reports/phase8a_run.json
+  tests_json: reports/phase8a_tests.json
+  pre_snapshot: reports/phase8a_pre_snapshot.json
+  report_md: reports/PHASE8A_REPORT.md
+  work_dir: "C:/Users/User/AppData/Local/Temp/phase8a_dicom"   # raw DICOM scratch, deleted after conversion
+  ct_filename: CT.nii.gz
+  gtv_filename: ROI_A_GTV.nii.gz
+  rim_filename: ROI_RIM.nii.gz
+  gtv_rim_filename: ROI_E_GTV_Rim.nii.gz
+  log: logs/phase8a.log

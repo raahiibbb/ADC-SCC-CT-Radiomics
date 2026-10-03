@@ -1,0 +1,206 @@
+# Phase 5C - FEATURE-SELECTION RESCUE TEST for the GTV+Rim local-radiomics MIL.
+#
+# Phase 5 trained both MIL models on all 74 local radiomic features and reached
+# pooled out-of-fold ROC-AUC 0.5702 (mean pooling) / 0.5767 (gated attention) on
+# the frozen 202 GTV+Rim bags.  Phase 5C tests ONE hypothesis: that redundant or
+# noisy radiomic dimensions are what prevents the MIL model from generalising.
+#
+# EXACTLY TWO selectors are tested - LASSO and mRMR.  Nothing else about the
+# pipeline changes: the same frozen bags, the same frozen outer split, the same
+# 3-fold inner CV structure, the same encoder (only its input width changes to
+# K_selected), the same optimiser, loss, class weighting, epoch budget and 0.5
+# threshold.  Feature selection is the only changed variable.
+#
+# CRITICAL MIL RULE (encoded below and enforced by tests/test_phase5c.py):
+# supervised feature selection operates at the PATIENT level.  Each patient
+# contributes exactly ONE 74-dimensional vector - the per-feature MEDIAN over
+# that patient's retained patches - regardless of whether the bag holds 8 or 900
+# patches.  The patient label is NEVER copied onto individual patches.
+#
+# LEAKAGE RULE: feature selection is part of model training, so it happens
+# INSIDE the nested CV.  It is never fitted once on all 202 patients, and no
+# outer-test patient ever influences the selected features, the number of
+# selected features, the LASSO C, the mRMR K, any scaler, the epoch or the class
+# weighting.
+
+phase3:
+  name: gtv_rim_mil_p5c
+  roi: gtv_rim
+  # frozen, read-only inputs - the Phase-4 products, unchanged
+  features_dir: patch_features/gtv_rim
+  splits_file: splits/gtv_rim_stratified_5fold.csv
+  splits_meta_file: splits/gtv_rim_stratified_5fold_meta.json
+  feature_names_file: config/feature_names.txt
+  cohort_file: cohort/gtv_rim_cohort.csv
+  expected_patients: 202
+  expected_adc: 51
+  expected_scc: 151
+  expected_features: 74
+  expected_patches: 37464
+  expected_extraction_signature: "9825ed13538ee681"
+
+# ---------------------------------------------------------------------------
+# Patient-level summaries used ONLY to decide which original radiomic
+# dimensions to retain.  One row per patient, computed from that patient's own
+# frozen bag alone: no label, no cross-patient statistic, no scaling.  Bag size
+# is therefore irrelevant to the selector.
+# ---------------------------------------------------------------------------
+patient_summary:
+  statistic: median          # patient_summary[j] = median over that patient's patches
+  dim: 74
+  dtype: float64
+  dir: patient_summaries/gtv_rim_median
+  npz: patient_summaries/gtv_rim_median/summaries.npz
+  csv: patient_summaries/gtv_rim_median/summaries.csv
+  json: patient_summaries/gtv_rim_median/provenance.json
+
+inner_cv:
+  # the Phase-5 robust inner-CV structure, verbatim
+  n_splits: 3
+  shuffle: true
+  base_seed: 3000            # fold seed = base_seed + outer_fold  (same as Phase 5)
+  epoch_selection: mean_inner_cv_roc_auc
+  # joint (selector setting, epoch) selection over the full surface
+  tie_break: [smaller_selected_feature_count, lower_epoch, config_order]
+
+# ---------------------------------------------------------------------------
+# SELECTORS
+# ---------------------------------------------------------------------------
+selectors:
+
+  mrmr:
+    # Deterministic CONTINUOUS mRMR, Ding & Peng (2003) "FCD" criterion
+    # (Table 1, F-test correlation difference), computed on the patient-level
+    # summaries of the INNER-TRAINING patients only.
+    #
+    #   relevance:   F(i, h)  = one-way ANOVA F statistic, Ding & Peng Eq. (8)
+    #   redundancy:  |c(i,j)| = absolute Pearson correlation between features
+    #   first pick:  argmax_i F(i, h)
+    #   then:        argmax over the unselected i of
+    #                    F(i,h) - (1/|S|) * sum over j in S of |c(i,j)|
+    #
+    # Both statistics are scale invariant, so no scaler is fitted for mRMR.
+    # The greedy order does not depend on K, so one ranking per inner split
+    # serves every K and the selected sets are nested prefixes of that ranking.
+    criterion: FCD_difference
+    relevance: anova_f_statistic
+    redundancy: mean_absolute_pearson_correlation
+    tie_break: lowest_feature_index
+    zero_variance_relevance: 0.0      # a constant feature scores 0, never NaN
+    zero_variance_correlation: 0.0
+    candidates_key: k
+    candidates: [8, 12, 16, 24, 32]
+
+  lasso:
+    # L1-penalised logistic regression on the patient-level summaries.
+    # A StandardScaler is fitted on the INNER-TRAINING PATIENT SUMMARIES ONLY
+    # and is used for feature selection ONLY - it never touches the patches.
+    estimator: LogisticRegression
+    penalty: l1
+    solver: liblinear
+    class_weight: balanced
+    max_iter: 20000
+    tol: 1.0e-6
+    random_state: 42
+    coefficient_tolerance: 1.0e-8     # selected iff abs(coef) > tol
+    zero_selection: invalid_candidate  # never silently substitute features
+    candidates_key: C
+    candidates: [0.01, 0.03, 0.1, 0.3, 1.0, 3.0, 10.0]
+
+# ---------------------------------------------------------------------------
+# MIL - Phase 5 architecture and training, unchanged except the input width
+# ---------------------------------------------------------------------------
+preprocessing:
+  # the patch scaler is a SEPARATE, training-only scaler fitted on the SELECTED
+  # patch dimensions of the training patients
+  standardize: zscore
+  patch_scaler_source: training_patches_selected_dimensions_only
+  min_std: 1.0e-8            # a selected dimension with std <= this raises
+
+model:
+  input_dim: null            # K_selected, set per fold/candidate at build time
+  encoder_hidden: [64, 32]
+  activation: relu
+  dropout: 0.2
+  attention_hidden: 32
+  pooling:
+    mean_mil: mean
+    attention_mil: gated_attention
+
+training:
+  optimizer: adam
+  learning_rate: 1.0e-3
+  weight_decay: 1.0e-4
+  max_epochs: 100
+  bags_per_batch: 1
+  loss: weighted_bce_with_logits
+  pos_weight_source: training_patient_counts
+  device: cpu
+  early_stopping_patience: null
+
+seeds:
+  python: 42
+  numpy: 42
+  torch: 42
+  # The MIL run seeds deliberately do NOT depend on the selector or on the
+  # candidate setting, so two candidates that select the identical feature set
+  # produce an identical run.  That makes the surface auditable and lets the
+  # driver reuse a cached run instead of repeating it.
+  inner_base_seed: 6000      # inner seed = 6000 + 100*fold + 10*inner_fold + model_offset
+  final_base_seed: 7000      # refit seed = 7000 + 10*fold + model_offset
+  deterministic_torch: true
+
+evaluation:
+  threshold: 0.5
+  positive_class: 1
+  small_bag_threshold: 20
+
+# ---------------------------------------------------------------------------
+# Baseline comparison - the Phase-5 74-feature models are NOT retrained.
+# Their stored out-of-fold predictions are read and must be byte-identical.
+# ---------------------------------------------------------------------------
+baseline:
+  name: phase5_gtv_rim_74_features
+  config: config/phase5.yaml
+  predictions_dir: predictions
+  model_files:
+    mean: predictions/gtv_rim_mean_mil_oof.csv
+    attention: predictions/gtv_rim_attention_mil_oof.csv
+  expected_roc_auc:
+    mean: 0.5702
+    attention: 0.5767
+  bootstrap:
+    n_resamples: 5000
+    seed: 20260901          # + 1 per comparison, in the documented pipeline order
+    unit: patient           # patients resampled with replacement; NEVER patches
+    ci: 0.95
+    merge_on: PatientID
+    expected_paired_patients: 202
+
+# ---------------------------------------------------------------------------
+# The four Phase-5C pipelines
+# ---------------------------------------------------------------------------
+pipelines:
+  - {tag: mrmr_mean,       selector: mrmr,  model: mean_mil,      baseline: mean}
+  - {tag: mrmr_attention,  selector: mrmr,  model: attention_mil, baseline: attention}
+  - {tag: lasso_mean,      selector: lasso, model: mean_mil,      baseline: mean}
+  - {tag: lasso_attention, selector: lasso, model: attention_mil, baseline: attention}
+
+outputs:
+  phase_tag: "5c"
+  model_prefix: "phase5c_"
+  model_suffix: ""
+  models_dir: models
+  predictions_dir: predictions
+  results_dir: results/phase5c
+  feature_selection_dir: feature_selection/phase5c
+  preprocessing_dir: preprocessing/phase5c
+  inner_splits_dir: splits/phase5c_inner_cv
+  checkpoint_dir: results/phase5c/checkpoints
+  inner_cache_dir: results/phase5c/inner_cache
+  surfaces_dir: results/phase5c/selector_surfaces
+  reports_dir: reports
+  run_json: reports/phase5c_run.json
+  training_log: logs/phase5c_training.log
+  # Phase 5C writes ONLY into the paths above plus predictions/phase5c_*_oof.csv.
+  # No Phase-3, Phase-3B, Phase-4 or Phase-5 artefact is ever touched.

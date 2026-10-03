@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.pyc
+.venv*/
+*.egg-info/
+.ipynb_checkpoints/
+
+# Medical data, derived data and outputs (never commit patient data)
+*.dcm
+*.nii
+*.nii.gz
+*.nrrd
+*.npy
+*.npz
+*.h5
+*.zip
+data/
+cohort/
+global_features/
+patch_features/
+image_patches/
+predictions/
+results/
+logs/
+qa/
+external/
+
+# Model weights
+*.pt
+*.pth
+*.torch
+*.ckpt
+*.safetensors
+models/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+~$*
+.vscode/
+.idea/

@@ -1,0 +1,170 @@
+# Phase 6B - MIL on the frozen Phase-6A ResNet18 CT embeddings.
+#
+# ONE scientific variable changes against config/phase5.yaml: the per-instance
+# REPRESENTATION.  74 handcrafted local-radiomic features become the 512-D frozen
+# ImageNet-ResNet18 embedding of the same 37 464 CT instances, in the same frozen
+# order, for the same 202 patients, under the same frozen outer split.
+#
+# Copied verbatim from config/phase5.yaml and NOT re-tuned for the new input:
+#   encoder hidden widths [64, 32], ReLU, dropout 0.2; Adam lr 1e-3 / wd 1e-4;
+#   weighted BCE with pos_weight from TRAINING PATIENT counts; ADC positive; one
+#   patient = one bag = one loss contribution; 100-epoch inner budget; stratified
+#   3-fold inner CV over the outer-training patients with seed 3000 + fold; epoch
+#   = argmax of the mean inner-CV ROC-AUC with the lowest epoch winning ties;
+#   final scaler and pos_weight from ALL outer-training patients; from-scratch
+#   refit for exactly the selected epoch; one outer-test evaluation; threshold
+#   0.5; the same near-zero-variance screen; no SMOTE; the same seed policy.
+#
+# The ONLY model change permitted is the input width, 74 -> 512, which follows
+# from the representation and is not a capacity decision.  Hidden widths must NOT
+# be enlarged because the input got wider - that would confound representation
+# with capacity and destroy the attribution this phase exists to make.
+
+phase3:
+  name: gtv_rim_cnn_mil_p6b
+  roi: gtv_rim
+  # frozen, read-only inputs - the Phase-6A embeddings and the Phase-4 split
+  features_dir: cnn_embeddings/gtv_rim_resnet18
+  features_format: cnn_embedding          # <PID>.npz holds `embeddings` [N, 512]
+  splits_file: splits/gtv_rim_stratified_5fold.csv
+  splits_meta_file: splits/gtv_rim_stratified_5fold_meta.json
+  feature_names_file: config/phase6b_feature_names.txt
+  cohort_file: cohort/gtv_rim_cohort.csv
+  expected_patients: 202
+  expected_adc: 51
+  expected_scc: 151
+  expected_features: 512
+  expected_instances: 37464
+  expected_extraction_signature: "9825ed13538ee681"   # the frozen GTV+Rim lattice
+  # Phase-6A provenance every embedding file must carry, verified before training
+  expected_encoder:
+    architecture: resnet18
+    weights_enum: ResNet18_Weights.IMAGENET1K_V1
+    state_fingerprint: "b6e132d398763cadd5e66a4e994f5a5eb6cf7bd415eb7e8fae476475f749ffe2"
+    head: "fc -> Identity"
+    frozen: true
+  expected_transform_signature: "7d52e0dac8a4438d"
+  expected_image_crop_signature: "49756d388a80414f"
+  verify_frozen_inputs: true
+
+inner_cv:
+  # stratified K-fold over the OUTER TRAIN patients, used only to choose an epoch
+  n_splits: 3
+  shuffle: true
+  # fold-specific seed = base_seed + outer_fold        (Phase-5 convention)
+  base_seed: 3000
+  epoch_selection: mean_inner_cv_roc_auc
+  tie_break: lowest_epoch
+
+preprocessing:
+  # The DETERMINISTIC Phase-5 near-zero-variance rule, unchanged.  It has never
+  # dropped a handcrafted feature; post-ReLU CNN dimensions may well be dropped
+  # here.  That is a result to report, never a threshold to retune.
+  variance:
+    absolute_std_threshold: 1.0e-8
+    relative_std_threshold: 1.0e-8
+    eps: 1.0e-12
+  standardize: zscore
+
+model:
+  input_dim: 512                # was 74; the only permitted architecture change
+  encoder_hidden: [64, 32]      # UNCHANGED - do not widen because the input widened
+  activation: relu
+  dropout: 0.2
+  attention_hidden: 32
+  pooling:
+    mean_mil: mean
+    attention_mil: gated_attention
+
+training:
+  optimizer: adam
+  learning_rate: 1.0e-3
+  weight_decay: 1.0e-4
+  max_epochs: 100
+  bags_per_batch: 1
+  loss: weighted_bce_with_logits
+  pos_weight_source: training_patient_counts   # inner-train during selection, outer-train for the refit
+  device: cpu                  # same device as Phase 5, so no device effect can be confused with a representation effect
+  early_stopping_patience: null                # superseded by inner-CV epoch selection
+
+seeds:
+  python: 42
+  numpy: 42
+  torch: 42
+  inner_base_seed: 4000
+  final_base_seed: 5000
+  deterministic_torch: true
+
+evaluation:
+  threshold: 0.5
+  positive_class: 1
+  small_bag_threshold: 20
+  small_bag_annotate_shared: false
+
+# ---------------------------------------------------------------------------
+# Baseline comparison.  NOTHING is retrained: the Phase-5 and Phase-5C
+# out-of-fold predictions are read from disk and verified byte-identical.
+# The two PRIMARY comparisons are same-architecture (identical pooling, identical
+# splits, identical training settings); only the representation differs.
+# ---------------------------------------------------------------------------
+representation_comparison:
+  new_name: phase6b_cnn_resnet18
+  expected_paired_patients: 202
+  primary:
+    - key: mean
+      model: mean_mil
+      label: "CNN Mean MIL vs radiomics Mean MIL"
+      reference_name: phase5_radiomics
+      reference_predictions: predictions/gtv_rim_mean_mil_oof.csv
+      seed: 20260931
+    - key: attention
+      model: attention_mil
+      label: "CNN Attention MIL vs radiomics Attention MIL"
+      reference_name: phase5_radiomics
+      reference_predictions: predictions/gtv_rim_attention_mil_oof.csv
+      seed: 20260932
+  # SECONDARY: representation AND pipeline differ (feature selection is present
+  # on the reference side), so this is a best-handcrafted-pipeline benchmark and
+  # must never be described as a same-architecture comparison.
+  secondary:
+    - key: best_handcrafted
+      label: "best Phase-6B model vs mRMR + Attention MIL (Phase 5C)"
+      reference_name: phase5c_mrmr_attention
+      reference_predictions: predictions/phase5c_mrmr_attention_oof.csv
+      reference_pooled_roc_auc: 0.5929
+      seed: 20260933
+  bootstrap:
+    n_resamples: 5000
+    unit: patient          # patients are resampled with replacement; NEVER patches
+    ci: 0.95
+  outputs:
+    comparison_csv: results/phase6b/model_comparison.csv
+    bootstrap_json: results/phase6b/representation_paired_bootstrap.json
+
+outputs:
+  phase_tag: "6b"
+  # explicit artefact names, so nothing can collide with Phase 5 / 5C
+  model_names:
+    mean_mil: phase6b_cnn_mean
+    attention_mil: phase6b_cnn_attention
+  results_model_names:
+    mean_mil: mean
+    attention_mil: attention
+  models_dir: models
+  predictions_dir: predictions
+  attention_dir: attention/gtv_rim_resnet18_phase6b
+  attention_sources:
+    - tag: phase6b_cnn
+      dir: attention/gtv_rim_resnet18_phase6b
+  attention_concentration_plain_csv: true
+  results_dir: results/phase6b
+  # `model_comparison.csv` and `small_bag_predictions.csv` are the combined,
+  # baseline-aware tables written by src/repr_paired_compare.py; the evaluator's
+  # own within-phase tables go beside them under these names.
+  model_comparison_csv: pooling_comparison.csv
+  small_bag_csv: small_bag_predictions_long.csv
+  inner_splits_dir: splits/phase6b_inner_cv
+  preprocessing_dir: preprocessing/phase6b
+  reports_dir: reports
+  run_json: reports/phase6b_run.json
+  training_log: logs/phase6b_training.log

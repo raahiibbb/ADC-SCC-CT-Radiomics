@@ -1,0 +1,74 @@
+# Phase 1 — Gradient local-radiomics extraction configuration
+# Scientific parameters live here, not in code.
+
+experiment:
+  name: gradient_local_radiomics
+  phase: 1
+  roi: gradient
+  roi_filename: ROI_D_gradient.nii.gz
+
+paths:
+  # READ-ONLY external inputs
+  vuong_root: "D:/User/Documents/L.U.N.G/Vuong5ROI/outputs/full_cohort"
+  cohort_summary: "D:/User/Documents/L.U.N.G/Vuong5ROI/outputs/full_cohort/cohort_summary.csv"
+  dataset_metadata: "D:/User/Documents/L.U.N.G/Dataset/Lung1 clinical/dataset_metadata_master.csv"
+  ct_filename: CT.nii.gz
+  gtv_filename: ROI_A_GTV.nii.gz
+  # project-owned outputs (relative to project root)
+  cohort_file: cohort/gradient_cohort.csv
+  features_dir: patch_features/gradient
+  splits_file: splits/stratified_5fold.csv
+  qa_dir: qa
+
+cohort:
+  expected_total_subjects: 203
+  expected_eligible: 194
+  # The nine subjects with no valid Gradient ROI (Vuong5ROI Phase 2, sections 5.2 / 5.4).
+  gradient_exclusions:
+    - LUNG1-011   # non-uniform slice spacing / 96 unmapped SEG frames
+    - LUNG1-017   # 4 mm contraction empties GTV
+    - LUNG1-040
+    - LUNG1-041
+    - LUNG1-071
+    - LUNG1-109
+    - LUNG1-127
+    - LUNG1-157
+    - LUNG1-170
+  histology_map:
+    adenocarcinoma: 1          # positive class
+    squamous cell carcinoma: 0
+
+preprocessing:
+  resample_spacing_mm: [2.0, 2.0, 2.0]
+  ct_interpolator: linear
+  mask_interpolator: nearest
+  ct_default_value: -1024.0    # HU of air, used outside the original FOV
+
+patches:
+  size_voxels: [5, 5, 5]
+  stride_voxels: [5, 5, 5]
+  # grid is anchored at resampled voxel index (0,0,0) so that patch positions are
+  # identical across all ROIs of the same patient (needed for the later 5-ROI study)
+  grid_anchor: image_origin
+  require_full_in_bounds: true
+  require_center_in_roi: true
+  min_roi_voxels: 27
+
+radiomics:
+  params_file: config/radiomics_params.yaml
+  # values below are duplicated into the params file; kept here for the config hash
+  bin_width: 20
+  resegment_range: [-1024, 200]
+  resegment_mode: absolute
+  image_types: [Original]
+  feature_classes: [firstorder, glcm, glrlm, glszm]
+  shape_features: false
+
+validation:
+  n_splits: 5
+  random_state: 42
+  shuffle: true
+  stratify_by: label
+
+reproducibility:
+  seed: 42
