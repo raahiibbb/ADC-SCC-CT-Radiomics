@@ -44,9 +44,41 @@ M_NS = "http://schemas.openxmlformats.org/officeDocument/2006/math"
 
 
 # ======================================================================= helpers
+def fill_nary(root):
+    """MML2OMML leaves the summand of a sum empty (<m:e/>) when it is not one grouped term, and Word
+    then draws an empty slot (a large gap) after the sign. Move the following terms into the sum,
+    up to the next '=', ',', ';' or '≈' at the same level."""
+    m = f"{{{M_NS}}}"
+    stops = "=,;≈"
+    for g in root.iter(m + "grow"):          # all sum signs the same size (no stretching around inner sums)
+        g.set(m + "val", "0")
+    for nary in list(root.iter(m + "nary")):
+        e = nary.find(m + "e")
+        if e is None or len(e):
+            continue
+        while True:
+            sib = nary.getnext()
+            if sib is None:
+                break
+            if sib.tag == m + "r":
+                t = sib.find(m + "t")
+                txt = t.text if t is not None and t.text else ""
+                cut = min([txt.find(c) for c in stops if c in txt], default=-1)
+                if cut == 0:
+                    break
+                if cut > 0:                       # split the run: head goes into the sum
+                    head = copy.deepcopy(sib)
+                    head.find(m + "t").text = txt[:cut]
+                    t.text = txt[cut:]
+                    e.append(head)
+                    break
+            e.append(sib)
+
+
 def omml(latex, display=False):
     mml = latex2mathml.converter.convert(latex, display="block" if display else "inline")
     m = XSL(etree.fromstring(mml.encode())).getroot()
+    fill_nary(m)
     if display:
         para = etree.Element(f"{{{M_NS}}}oMathPara")
         para.append(m)
@@ -326,9 +358,7 @@ class Builder:
                 cp.alignment = {"l": WD_ALIGN_PARAGRAPH.LEFT, "c": WD_ALIGN_PARAGRAPH.CENTER,
                                 "r": WD_ALIGN_PARAGRAPH.RIGHT}[a]
                 self._rich(cp, str(val), size=size, bold=(i == 0) or (bold_last and i == len(rows)))
-                if i == 0:
-                    shade(cell, "D9E2F3")
-                elif shade_rows and (i - 1) in shade_rows:
+                if i > 0 and shade_rows and (i - 1) in shade_rows:
                     shade(cell, "FFF2CC")
                 if widths:
                     cell.width = Inches(widths[j])
@@ -348,8 +378,6 @@ class Builder:
         t = self.doc.add_table(rows=1, cols=2)
         t.style = self.doc.styles["Table Grid"]
         t.alignment = WD_TABLE_ALIGNMENT.CENTER
-        cant = OxmlElement("w:cantSplit")
-        t.rows[0]._tr.get_or_add_trPr().append(cant)
         for j, txt in enumerate((left, right)):
             cell = t.cell(0, j)
             cell.width = Inches(TEXT_W / 2)

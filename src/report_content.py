@@ -244,7 +244,7 @@ def CONTENT(b):
         "class) and $y_i=0$ means SCC. We want a function $f$ that maps a CT scan to a real-valued score "
         r"$s_i=f(I_i)$, with $\hat{y}_i=\mathbb{1}[s_i>0]$. Ranking quality is measured by the ROC-AUC, which is "
         "the probability that a random ADC patient receives a higher score than a random SCC patient:")
-    b.eq(r"\mathrm{AUC}=\frac{1}{n_1 n_0}\sum_{i:y_i=1}\ \sum_{j:y_j=0}\left[\mathbb{1}(s_i>s_j)+\frac{1}{2}\mathbb{1}(s_i=s_j)\right]", "auc")
+    b.eq(r"\mathrm{AUC}=\frac{1}{n_1 n_0}\sum_{i:y_i=1}\sum_{j:y_j=0}\left[\mathbb{1}(s_i>s_j)+\frac{1}{2}\mathbb{1}(s_i=s_j)\right]", "auc")
     b.p("where $n_1$ and $n_0$ are the numbers of ADC and SCC patients. The real goal is not the AUC on pooled "
         "data but the AUC at a hospital $h^{*}$ that was not used for training:")
     b.eq(r"f^{*}=\underset{f}{\mathrm{arg\,max}}\ \mathbb{E}_{h^{*}\notin\mathcal{H}_{\mathrm{train}}}\left[\mathrm{AUC}_{h^{*}}(f)\right]", "goal")
@@ -276,7 +276,7 @@ def CONTENT(b):
     b.p("To satisfy requirement R1 we weight each patient by the inverse size of its (hospital, class) group:")
     b.eq(r"w_i=\frac{1}{H\cdot n_{h_i,y_i}}", "weights")
     b.p("and define the site-balanced AUC as the weighted version of {eq:auc}:")
-    b.eq(r"\mathrm{AUC}_{\mathrm{SB}}=\frac{\sum_{i:y_i=1}\sum_{j:y_j=0}w_iw_j\left[\mathbb{1}(s_i>s_j)+\frac{1}{2}\mathbb{1}(s_i=s_j)\right]}{\sum_{i:y_i=1}w_i\ \sum_{j:y_j=0}w_j}", "sbauc")
+    b.eq(r"\mathrm{AUC}_{\mathrm{SB}}=\frac{\sum_{i:y_i=1}\sum_{j:y_j=0}w_iw_j\left[\mathbb{1}(s_i>s_j)+\frac{1}{2}\mathbb{1}(s_i=s_j)\right]}{\sum_{i:y_i=1}w_i\sum_{j:y_j=0}w_j}", "sbauc")
     b.p("After weighting, each of the $2H$ (hospital, class) groups has the same total weight $1/H$. For the "
         "hospital-only predictor of {eq:siteonly}, pairs from the same hospital are ties and contribute 1/2. For "
         r"two different hospitals $h$ and $h'$, the ordered pairs (ADC from $h$, SCC from $h'$) and (ADC from $h'$, "
@@ -615,7 +615,7 @@ def CONTENT(b):
         "no radiation dose and no procedural risk.")
     b.h3("Considerations to environment")
     b.p("We chose small classical models instead of large networks. Training the final model takes minutes on a "
-        "laptop GPU, and the whole project used roughly 10-15 kWh of electricity (Section 8). Public data was "
+        "laptop GPU. Public data was "
         "reused instead of collecting new scans, which avoids extra scanning and its energy and radiation cost. "
         "Downloaded data was kept on one disk and processed once, and extracted features were stored so that "
         "experiments did not repeat expensive computation.")
@@ -874,10 +874,9 @@ def CONTENT(b):
         "in minutes when a new hospital joins.")
     b.sub("Economic sustainability")
     b.p("The pipeline uses free, open-source software and runs on a mid-range laptop, so a hospital would need no "
-        "special hardware (Section 8).")
+        "special hardware.")
     b.sub("Environmental sustainability")
-    b.p("Energy use is low (about 10-15 kWh for the whole project) because we avoided training large networks and "
-        "reused public data.")
+    b.p("Energy use is low because we avoided training large networks and reused public data.")
     b.sub("Long-term use")
     b.p("New hospitals can be added without their labels through label-free ComBat mapping, and the locked-test "
         "protocol can be repeated each time the model is updated.")
@@ -945,13 +944,7 @@ def CONTENT(b):
     # ------------------------------------------------------------ communication
     b.h1("Communication to External Stakeholders (PO(j))")
     b.h2("Executive Summary")
-    b.p("Can a CT scan tell which type of lung cancer a patient has? A BUET student project has built a "
-        "computer program that reads a routine chest CT scan and estimates whether a lung tumour is "
-        "adenocarcinoma or squamous cell carcinoma, the two main types, which are treated differently. The program "
-        "finds and outlines the tumour by itself, measures its position and the texture around it, and removes "
-        "differences caused by different scanners. Tested on 1041 patients from hospitals in three countries, and "
-        "then on two new datasets kept hidden until the end, it was right in about seven out of ten comparisons. "
-        "It is a research tool that may one day support, not replace, biopsy.")
+    b.p("Lung adenocarcinoma and squamous cell carcinoma are the two most common types of lung cancer and are treated differently, but the type is usually confirmed only by biopsy. This project developed an automatic method that estimates the type from the routine chest CT scan. The software outlines the tumour, measures its position and surrounding texture, and corrects for differences between hospital scanners. It was developed on 1041 patients from four public datasets and tested on two datasets kept aside until the end. On unseen hospitals it reached an AUC of about 0.7 (0.5 is guessing, 1.0 is perfect). It is a research tool to support, not replace, biopsy.")
     b.h2("User Manual")
     b.p("The steps below run the frozen model on a new CT scan. Commands are run from the project folder with the "
         "Python environments described in Section 4.")
@@ -978,30 +971,16 @@ def CONTENT(b):
 
     # ------------------------------------------------------------ management
     b.h1("Project Management and Cost Analysis (PO(k))")
-    b.p("This project is software only, so its costs are computing, data transfer and time rather than "
-        "hardware components. The figures below are estimates in Bangladeshi Taka (BDT).")
-    b.h2("Bill of Materials")
-    b.table(["Item", "Quantity / use", "Cost (BDT)"], [
-        ["Laptop with RTX 3050 GPU (already owned)", "share of value used over 2 months (about 90,000 BDT over 4 years)", "3,750"],
-        ["Storage for data (part of a 1 TB disk)", "about 150 GB", "900"],
-        ["Internet data", "about 90 GB downloaded over 2 months", "2,500"],
-        ["Electricity", "about 15 kWh at about 12 BDT/kWh", "180"],
-        ["Software (Python, PyRadiomics, scikit-learn, LightGBM, MedSAM2, TotalSegmentator)", "open source", "0"],
-        ["Datasets (TCIA, IDC)", "public", "0"],
-        ["**Total**", "", "**about 7,330**"],
-    ], "Bill of materials (estimated)", "bom", widths=[3.0, 2.2, 1.0], align="llr")
-    b.h2("Calculation of Per Unit Cost of Prototype")
-    b.p("The prototype is the trained pipeline. Its development cost is the total of {tab:bom}, about 7,330 BDT, "
-        "plus the student's time (about 8 weeks). The compute part is small: development runs used roughly "
-        "100-150 GPU-hours of laptop time at about 0.1 kW, i.e. 10-15 kWh.")
-    b.h2("Calculation of Per Unit Cost of Mass-Produced Unit")
-    b.p("For a deployed tool the relevant unit is one patient analysed. Measured times on the laptop were about "
-        "2.3 minutes per patient for nodule detection (3.2 hours for 85 TCGA scans), about 2 seconds for MedSAM2 "
-        "(38 minutes for 1041 patients), about 2 seconds for feature extraction and less than a second for "
-        "prediction, so about 2.5 minutes in total. With a power draw of 0.1 kW and electricity at 12 BDT/kWh, the cost per patient is")
-    b.eq(r"C_{\mathrm{patient}}=\underbrace{0.1\times\frac{2.5}{60}\times12}_{\mathrm{energy}}+\underbrace{\frac{150000}{5\times20000}}_{\mathrm{workstation}}\approx0.05+1.5\approx1.6\ \mathrm{BDT}", "cost")
-    b.p("assuming a dedicated 150,000 BDT workstation used for 20,000 scans per year for five years. Even with "
-        "maintenance and staff time added, the cost per patient is a very small fraction of the cost of a biopsy.")
+    b.p("This was a software project, so no hardware had to be bought. All datasets and software are free, and "
+        "the work was done on an existing laptop. The project was planned in weekly steps (Table 19).")
+    b.h2("Resources and Cost")
+    b.table(["Resource", "Details", "Cost"], [
+        ["Datasets", "LUNG1, NSCLC-Radiogenomics, Lung-PET-CT-Dx, NLST, Lung3, TCGA (TCIA, NCI IDC)", "Free (public)"],
+        ["Software", "Python, PyRadiomics, scikit-learn, LightGBM, PyTorch, MedSAM2, TotalSegmentator", "Free (open source)"],
+        ["Computing", "Existing laptop with an NVIDIA RTX 3050 GPU (4 GB)", "No extra cost"],
+    ], "Resources used in the project", "bom", widths=[1.1, 3.7, 1.4])
+    b.p("The finished pipeline needs about 2.5 minutes per patient on the same laptop, so applying it to new "
+        "patients would not require special hardware.")
     b.h2("Timeline of Project Implementation")
     b.p("{fig:gantt} shows the timeline as a Gantt chart. The work was done in eight weeks: the mid-term break "
         "and Weeks 8-14. The progress presentation was in Week 10 and the final demonstration in Week 14.")

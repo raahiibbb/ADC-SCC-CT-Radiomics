@@ -248,22 +248,21 @@ def gantt():
 def shortcut():
     fig, ax = plt.subplots(figsize=(5.4, 3.0))
     labs = ["Hospital name only\n(no image)", "Naive radiomics\nmodel", "Final model\n(this work)"]
-    raw, fair = [0.710, 0.727, np.nan], [0.497, 0.642, 0.722]
     x = np.arange(3)
-    b1 = ax.bar(x - 0.19, raw, 0.36, color=RED, label="Standard pooled AUC")
-    b2 = ax.bar(x + 0.19, fair, 0.36, color=TEAL, label="Site-balanced AUC")
+    b1 = ax.bar([-0.19, 0.81], [0.710, 0.727], 0.36, color=RED, label="Standard pooled AUC")
+    b2 = ax.bar([0.19, 1.19, 2.0], [0.497, 0.642, 0.722], 0.36, color=TEAL, label="Site-balanced AUC")
     for bars in (b1, b2):
         for r in bars:
-            if np.isfinite(r.get_height()):
-                ax.text(r.get_x() + r.get_width() / 2, r.get_height() + 0.008, f"{r.get_height():.3f}",
-                        ha="center", va="bottom", fontsize=9.5)
+            ax.text(r.get_x() + r.get_width() / 2, r.get_height() + 0.006, f"{r.get_height():.3f}",
+                    ha="center", va="bottom", fontsize=9.5)
     ax.axhline(0.5, color=GREY, ls="--", lw=1)
-    ax.text(-0.45, 0.505, "chance", color=GREY, fontsize=9, ha="left", va="bottom")
+    ax.text(2.88, 0.506, "chance (0.5)", color=GREY, fontsize=9, ha="right", va="bottom")
     ax.set_xticks(x)
     ax.set_xticklabels(labs)
-    ax.set_ylim(0.4, 0.8)
+    ax.set_xlim(-0.55, 2.9)
+    ax.set_ylim(0.4, 0.78)
     ax.set_ylabel("ROC-AUC")
-    ax.legend(frameon=False, fontsize=9.5, loc="upper left", ncol=2)
+    ax.legend(frameon=False, fontsize=9.5, loc="lower center", ncol=2, bbox_to_anchor=(0.5, 1.0))
     save(fig, "fig_shortcut")
 
 
@@ -416,21 +415,29 @@ def hparams():
              "svm": ("SVM: C", "C", [0.1, 1.0, 10.0]),
              "lgbm": ("LightGBM: leaves", "num_leaves", [4, 8]),
              "ridge_all": ("Ridge: C", "C", [0.0001, 0.0003, 0.001, 0.003, 0.01])}
-    fig, axs = plt.subplots(1, 4, figsize=(7.0, 2.4))
+    fig, axs = plt.subplots(1, 4, figsize=(7.0, 2.7), gridspec_kw={"width_ratios": [3, 3, 2, 5]})
     for ax, (m, (ttl, key, vals)) in zip(axs, order.items()):
         for k, (blk, c) in enumerate((("shells", TEAL), ("loc_clin", ORANGE))):
             met = json.load(open(os.path.join(ROOT, "results/phase13/pooled", f"{blk}__combat", "metrics.json")))
             ch = [f["chosen"][m][key] for f in met["folds"]]
             cnt = [sum(np.isclose(v, c_) for c_ in ch) for v in vals]
-            ax.bar(np.arange(len(vals)) + (k - 0.5) * 0.38, cnt, 0.38, color=c,
-                   label={"shells": "Shells", "loc_clin": "Position + clinical"}[blk])
+            bars = ax.bar(np.arange(len(vals)) + (k - 0.5) * 0.38, cnt, 0.38, color=c,
+                          label={"shells": "Shells block", "loc_clin": "Position + clinical block"}[blk])
+            for r in bars:
+                if r.get_height() > 0:
+                    ax.text(r.get_x() + r.get_width() / 2, r.get_height() + 0.4, f"{int(r.get_height())}",
+                            ha="center", va="bottom", fontsize=7.5)
         ax.set_xticks(range(len(vals)))
-        ax.set_xticklabels([f"{v:g}" for v in vals], fontsize=8, rotation=0 if len(vals) < 4 else 35)
+        ax.set_xticklabels([f"{v:g}" if v >= 0.001 else f"{v:.0e}".replace("e-0", "e-") for v in vals], fontsize=8.5)
         ax.set_title(ttl, fontsize=10)
-        ax.set_ylim(0, 25)
-    axs[0].set_ylabel("Times chosen (of 25)")
-    axs[0].legend(frameon=False, fontsize=8, loc="upper right")
-    fig.tight_layout()
+        ax.set_ylim(0, 29)
+        ax.set_xlim(-0.6, len(vals) - 0.4)
+    axs[0].set_ylabel("Times chosen (of 25 folds)")
+    for ax in axs[1:]:
+        ax.set_yticklabels([])
+    h, l = axs[0].get_legend_handles_labels()
+    fig.legend(h, l, frameon=False, fontsize=9, loc="upper center", ncol=2, bbox_to_anchor=(0.5, 1.0))
+    fig.tight_layout(rect=(0, 0, 1, 0.93))
     save(fig, "fig_hparams")
     # top-k for the logistic regression
     out = {}
