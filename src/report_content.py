@@ -87,6 +87,11 @@ REFS = {
     "nlst": "National Lung Screening Trial Research Team, \"Reduced lung-cancer mortality with low-dose computed tomographic screening,\" *New England Journal of Medicine*, vol. 365, no. 5, pp. 395-409, 2011.",
     "sybil": "P. G. Mikhael *et al.*, \"Sybil: a validated deep learning model to predict future lung cancer risk from a single low-dose chest computed tomography,\" *Journal of Clinical Oncology*, vol. 41, no. 12, pp. 2191-2200, 2023.",
     "lung3": "H. J. W. L. Aerts *et al.*, \"Data from NSCLC-Radiomics-Genomics,\" The Cancer Imaging Archive, 2015, doi: 10.7937/K9/TCIA.2015.L4FRET6Z.",
+    "mann1947": "H. B. Mann and D. R. Whitney, \"On a test of whether one of two random variables is stochastically larger than the other,\" *Annals of Mathematical Statistics*, vol. 18, no. 1, pp. 50-60, 1947.",
+    "hanley1982": "J. A. Hanley and B. J. McNeil, \"The meaning and use of the area under a receiver operating characteristic (ROC) curve,\" *Radiology*, vol. 143, no. 1, pp. 29-36, 1982.",
+    "kruskal1952": "W. H. Kruskal and W. A. Wallis, \"Use of ranks in one-criterion variance analysis,\" *Journal of the American Statistical Association*, vol. 47, no. 260, pp. 583-621, 1952.",
+    "benjamini1995": "Y. Benjamini and Y. Hochberg, \"Controlling the false discovery rate: a practical and powerful approach to multiple testing,\" *Journal of the Royal Statistical Society: Series B*, vol. 57, no. 1, pp. 289-300, 1995.",
+    "chicco2020": "D. Chicco and G. Jurman, \"The advantages of the Matthews correlation coefficient (MCC) over F1 score and accuracy in binary classification evaluation,\" *BMC Genomics*, vol. 21, art. 6, 2020.",
     "tcga": "B. Albertina *et al.* and S. Kirk *et al.*, \"The Cancer Genome Atlas Lung Adenocarcinoma (TCGA-LUAD) and Lung Squamous Cell Carcinoma (TCGA-LUSC) collections,\" The Cancer Imaging Archive, 2016, doi: 10.7937/K9/TCIA.2016.JGNIHEP5 and 10.7937/K9/TCIA.2016.TYGKKFMQ.",
 }
 
@@ -153,6 +158,11 @@ def CONTENT(b):
         "to compare simple handcrafted models with deep-learning alternatives under the same honest protocol;",
         "to test the frozen model once on two external datasets that were locked until the end.",
     ], numbered=True)
+    b.sub("Novelty in brief")
+    b.p("The novelty of this work is not a new classifier but a complete pipeline whose reported accuracy cannot "
+        "come from recognising the hospital: a metric that provably ignores the hospital, label-free "
+        "harmonisation of new hospitals, the same automatic tumour outlining at every hospital, and external "
+        "tests that were locked before scoring. The contributions are listed in detail in {sec:novelty}.")
     b.sub("Why this is a Complex Engineering Problem")
     b.p("{tab:cep} maps the project to the attributes of a "
         "complex engineering problem. The main difficulty is that there is no obvious solution: a higher score "
@@ -180,7 +190,7 @@ def CONTENT(b):
          "sometimes not diagnostic, slow"],
         ["Visual reading by a radiologist", "No new tools needed", "Subjective; ADC and SCC often look alike"],
         ["End-to-end deep CNN on CT", "Learns features automatically", "Needs thousands of patients; tends to learn "
-         "scanner style (shown in Section 5.3)"],
+         "scanner style (shown in {sec:ablation})"],
         ["Single-hospital radiomics", "Simple, high internal scores", "Rarely transfers to other hospitals"],
         ["PET/CT based model", "Uses metabolic information", "PET is not available for every patient"],
         ["Multi-hospital harmonised radiomics (chosen)", "Works with routine CT, small models, honest "
@@ -261,7 +271,7 @@ def CONTENT(b):
         "R6. External tests must be pre-registered, frozen with a hash and scored once.",
     ])
 
-    b.h3("Analysis")
+    b.h3("Analysis", "analysis")
     b.p("{fig:dataset} shows the ADC/SCC mix of every cohort. LUNG1 is 25% ADC, whereas Radiogenomics, "
         "Lung-PET-CT-Dx and NLST are 79%, 81% and 73% ADC. Consider a predictor that never looks at the image and "
         "outputs only the ADC rate of the patient's hospital:")
@@ -286,8 +296,8 @@ def CONTENT(b):
         "predictor scores 0.497 and the naive radiomics model 0.642 ({fig:shortcut}). The same weights $w_i$ are "
         "used as sample weights during training, so the classifiers are not rewarded for predicting the hospital "
         "either. The second part of the analysis concerns scanner style: a logistic regression trained to "
-        "recognise the hospital from texture features reached an AUC of 0.81-0.91 (Section 5.3.3). This motivated "
-        "harmonisation (Section 3.2.4).")
+        "recognise the hospital from texture features reached an AUC of 0.81-0.91 ({sec:results}). This motivated "
+        "harmonisation ({sec:combat}).")
     b.fig("fig_shortcut.png", "The hospital shortcut. A predictor that only knows the hospital reaches a pooled "
           "AUC of 0.710 but exactly chance under the site-balanced AUC. The final model reaches 0.722 under the fair "
           "metric.", "shortcut", width=4.8)
@@ -309,7 +319,7 @@ def CONTENT(b):
     b.p("Clipping removes the effect of bone and metal, and binning makes texture less sensitive to small noise. "
         "2 mm was chosen as a compromise: many scans have 3-5 mm slices, and a finer grid would only invent detail.")
 
-    b.h3("Tumour Segmentation and Peritumoral Shells")
+    b.h3("Tumour Segmentation and Peritumoral Shells", "seg")
     b.p("For development cohorts the tumour location is an expert box (LUNG1 and Radiogenomics: the bounding box "
         "of the expert outline; Lung-PET-CT-Dx and NLST: expert boxes). For external data the box comes from "
         "the TotalSegmentator lung-nodule model {cite:totalseg}, taking the largest detected nodule. The box is "
@@ -344,7 +354,7 @@ def CONTENT(b):
         "features), an inner 4 mm ring inside the tumour, FMCIB deep features {cite:fmcib} and CT-FM features "
         "{cite:ctfm}.")
 
-    b.h3("Harmonisation with ComBat")
+    b.h3("Harmonisation with ComBat", "combat")
     b.p("ComBat {cite:johnson2007} assumes that feature $g$ of patient $i$ in hospital $h$ is shifted and "
         "scaled by the hospital:")
     b.eq(r"x_{ihg}=\alpha_g+\sigma_g\gamma_{hg}+\sigma_g\sqrt{\delta_{hg}}\,\varepsilon_{ihg},\qquad \varepsilon_{ihg}\sim\mathcal{N}(0,1)", "combat")
@@ -391,7 +401,8 @@ def CONTENT(b):
         "boundary with the widest margin, allowing some violations $\\xi_i$:")
     b.eq(r"\min_{\mathbf{v},b,\boldsymbol{\xi}}\ \frac{1}{2}\|\mathbf{v}\|^2+C\sum_{i}w_i\xi_i\quad \mathrm{s.t.}\quad t_i\left(\mathbf{v}^{\top}\phi(\mathbf{x}_i)+b\right)\ge1-\xi_i,\ \ \xi_i\ge0", "svm")
     b.p("Its decision function uses the radial basis function (RBF) kernel, which allows a curved boundary:")
-    b.eq(r"f(\mathbf{x})=\sum_{i}\alpha_i t_i K(\mathbf{x}_i,\mathbf{x})+b,\qquad K(\mathbf{x},\mathbf{x}')=\exp\left(-\gamma_K\|\mathbf{x}-\mathbf{x}'\|^2\right),\quad \gamma_K=\frac{1}{p\,\mathrm{Var}(X)}", "rbf")
+    b.eq(r"f(\mathbf{x})=\sum_{i}\alpha_i t_i K(\mathbf{x}_i,\mathbf{x})+b,\quad K(\mathbf{x},\mathbf{x}')=\exp\left(-\gamma_K\|\mathbf{x}-\mathbf{x}'\|^2\right)", "rbf")
+    b.p(r"with the kernel width $\gamma_K=1/\left(p\,\mathrm{Var}(X)\right)$ (the 'scale' setting of scikit-learn).")
     b.p("(3) LightGBM {cite:ke2017} builds 200 small decision trees one after another. Each new tree "
         "$h_m$ is fitted to the errors (negative gradients) of the current model and added with a learning "
         "rate $\\eta=0.03$, for $m=1,\\dots,200$:")
@@ -412,12 +423,20 @@ def CONTENT(b):
     b.eq(r"s(\mathbf{x})=\frac{1}{2}\left[z\left(s_{\mathrm{shell}}(\mathbf{x})\right)+z\left(s_{\mathrm{pos}}(\mathbf{x})\right)\right],\qquad \hat{y}=\mathbb{1}\left[s(\mathbf{x})>0\right]", "fusion")
     b.p("A positive score means ADC. Since the training weights balance the classes, 0 is the natural threshold.")
 
-    b.h3("Evaluation Metrics")
+    b.h3("Evaluation Metrics", "metrics")
     b.p("The primary metric is the site-balanced AUC of {eq:sbauc}. For the unseen-hospital and external tests "
         "the ordinary AUC is used, since only one hospital is scored at a time. At the threshold of "
         "{eq:fusion} we also report")
     b.eq(r"\mathrm{Se}=\frac{TP}{TP+FN},\qquad \mathrm{Sp}=\frac{TN}{TN+FP},\qquad \mathrm{BA}=\frac{\mathrm{Se}+\mathrm{Sp}}{2}", "metrics")
-    b.p("where ADC is the positive class. Uncertainty is given by a stratified bootstrap {cite:efron1993}: "
+    b.p("where ADC is the positive class. To describe the errors fully we also report the accuracy, the "
+        "positive and negative predictive values, the F1 score and the Matthews correlation coefficient (MCC):")
+    b.eq(r"\mathrm{Acc}=\frac{TP+TN}{TP+TN+FP+FN},\qquad \mathrm{PPV}=\frac{TP}{TP+FP},\qquad \mathrm{NPV}=\frac{TN}{TN+FN}", "metrics2")
+    b.eq(r"F_1=\frac{2\,\mathrm{PPV}\cdot\mathrm{Se}}{\mathrm{PPV}+\mathrm{Se}},\qquad \mathrm{MCC}=\frac{TP\cdot TN-FP\cdot FN}{\sqrt{(TP+FP)(TP+FN)(TN+FP)(TN+FN)}}", "mcc")
+    b.p("PPV and NPV depend on the ADC share of the data, so they are also given with the site-balanced weights "
+        "$w_i$ of {eq:weights}, where each patient counts $w_i$ times in $TP$, $FP$, $TN$ and $FN$. The MCC uses all "
+        "four cells of the confusion matrix; it is 0 for guessing and 1 for a perfect model, and unlike accuracy it "
+        "is not inflated by class imbalance {cite:chicco2020}.")
+    b.p("Uncertainty is given by a stratified bootstrap {cite:efron1993}: "
         "patients are resampled with replacement inside each (hospital, class) group $B=2000$ times, the metric "
         r"is recomputed each time, and the 95% confidence interval is $[\hat{\theta}^{*}_{(2.5)},\ "
         r"\hat{\theta}^{*}_{(97.5)}]$. The amount of hospital information left in the features is measured by a "
@@ -449,7 +468,7 @@ def CONTENT(b):
     b.p("{fig:architecture} shows the classifier part in detail. It has two parallel branches, one for each "
         "feature block. Each branch has its own preparation chain and its own four-model ensemble. The design "
         "is intentionally small: each model sees at most 50 features (or all 279 for the ridge model), so the "
-        "whole classifier has a few hundred parameters plus the trees, compared with millions in a CNN. "
+        "whole classifier has about 4,800 trainable parameters ({sec:params}), compared with millions in a CNN. "
         "{tab:arch} lists the settings.")
     b.fig("fig_architecture.png", "Architecture of the final classifier: two feature blocks, each with a "
           "preparation chain and a four-model ensemble, fused by averaging z-scored block scores.", "architecture",
@@ -468,8 +487,53 @@ def CONTENT(b):
         ["Final score", "mean of the two z-scored block scores; ADC if s > 0, {eq:fusion}"],
     ], "Settings of the final model", "arch", widths=[1.7, 4.5])
 
+    b.h3("Trainable and Non-trainable Parameters", "params")
+    b.p("For the classical models we count as trainable every number that is learned by minimising a training "
+        "loss, and as non-trainable every number that is fixed or computed in closed form: statistics such as "
+        "medians and ComBat estimates, stored support vectors, tree structure, and the weights of frozen "
+        "pretrained networks. The counts below are taken from the final model fitted on all 1041 patients with "
+        "the hyperparameters chosen by its inner cross-validation, which is the model used for the locked tests. "
+        "Refitting it reproduced the frozen test predictions (correlation above 0.9998). For a model that uses "
+        "$k$ features,")
+    b.eq(r"P_{\mathrm{LR}}=k+1,\qquad P_{\mathrm{SVM}}=n_{\mathrm{SV}}+1,\qquad P_{\mathrm{GBM}}=\sum_{m=1}^{M}\left(2L_m-1\right)", "params")
+    b.p("where $n_{\\mathrm{SV}}$ is the number of support vectors (one dual coefficient $\\alpha_i t_i$ each) and "
+        "a tree with $L_m$ leaves has $L_m-1$ split thresholds and $L_m$ leaf values. With $M=200$ trees of 4 "
+        "leaves, LightGBM has $200\\times7=1400$ trainable values. The preparation chain of a block with $p$ "
+        "input features stores $p$ medians, $2p$ ComBat reference values ($\\hat{\\alpha}_g,\\hat{\\sigma}_g$), "
+        "$2Hp$ hospital values ($\\gamma^{*}_{hg},\\delta^{*}_{hg}$) and $2p$ scaling values:")
+    b.eq(r"P_{\mathrm{prep}}=p+2p+2Hp+2p=(5+2H)\,p", "prep")
+    b.p("{tab:params} lists the counts for both blocks.")
+    b.table(["Component", "Shells block", "Position block", "Type"], [
+        ["Input features after cleaning (p)", "279", "13", "-"],
+        ["Logistic regression", "51 (k = 50)", "12 (k = 11)", "trainable"],
+        ["SVM dual coefficients + bias", "815 (814 SV)", "865 (864 SV)", "trainable"],
+        ["LightGBM thresholds + leaf values", "1,400", "1,400", "trainable"],
+        ["Ridge logistic regression (all features)", "280", "14", "trainable"],
+        ["Total trainable", "2,546", "2,291", "4,837 in total"],
+        ["Medians, ComBat and z-score statistics, {eq:prep}", "3,627", "169", "non-trainable"],
+        [r"Stored support vectors ($n_{\mathrm{SV}}\times k$)", "40,700", "9,504", "non-trainable"],
+        ["Tree split-feature indices", "600", "600", "non-trainable"],
+        [r"Score standardisation ($\mu_m,\sigma_m$)", "8", "8", "non-trainable"],
+        ["Total non-trainable", "44,935", "10,281", "55,216 in total"],
+    ], "Trainable and non-trainable parameters of the final model fitted on all 1041 patients. For the position "
+       "block, k = 25 was chosen but only 11 features remain after correlation pruning.", "params",
+        widths=[2.55, 1.15, 1.2, 1.3], align="lccc", size=9)
+    b.p("The image networks in the pipeline are used frozen, so all their weights are non-trainable: MedSAM2 has "
+        "38,962,754 parameters (counted from its checkpoint), and the TotalSegmentator nodule model is a frozen "
+        "nnU-Net. {tab:paramcmp} compares the final classifier with the models we tried earlier. It has fewer "
+        "trainable parameters than even the small MIL models and roughly 7,000 times fewer than the fine-tuned "
+        "CNN, which matters when each training fold has only about 830 patients.")
+    b.table(["Model", "Trainable", "Non-trainable (frozen)"], [
+        ["Final model (2 blocks x 4 classifiers)", "4,837", "55,216 statistics; MedSAM2 38.96 M"],
+        ["Mean-pooling MIL (74 patch features, 74-64-32-1)", "6,913", "0"],
+        ["Gated attention MIL (74 patch features)", "9,058", "0"],
+        ["Attention MIL on ResNet-18 patch embeddings", "37,090", "11,176,512 (ResNet-18)"],
+        ["Fine-tuned FMCIB (last block + heads)", "about 35 M", "rest of the 3-D ResNet-50"],
+    ], "Parameter counts of the final model and the deep alternatives (counted from the saved checkpoints)",
+        "paramcmp", widths=[2.6, 1.1, 2.5], align="lcl", size=9)
+
     # ---------------------------------------- training/validation (replaces CAD)
-    b.h2("Training and Validation Design")
+    b.h2("Training and Validation Design", "training")
     b.p("Two complementary validation schemes were used ({fig:cv_scheme}).")
     b.sub("Repeated nested cross-validation")
     b.p("Patients are split into 5 folds, stratified by hospital and class "
@@ -485,6 +549,19 @@ def CONTENT(b):
         "repeated for all four hospitals and is the closest simulation of using the model at a new hospital.")
     b.fig("fig_cv_scheme.png", "Validation design: (a) repeated nested cross-validation with an inner 3-fold "
           "loop for hyperparameter tuning; (b) leave-one-hospital-out testing.", "cv_scheme", width=6.2)
+    b.sub("Hyperparameter optimisation")
+    b.p("Hyperparameters were chosen by an exhaustive grid search inside the inner loop ({tab:grid}). For every "
+        r"model and every candidate setting $\theta$ in the grid $\Theta$, the whole training chain (imputation, "
+        "ComBat, scaling, feature ranking and the model) is fitted on two inner folds and scored on the third, "
+        "and the setting with the best mean inner score is kept:")
+    b.eq(r"\hat{\theta}=\underset{\theta\in\Theta}{\mathrm{arg\,max}}\ \frac{1}{3}\sum_{j=1}^{3}\mathrm{AUC}_{\mathrm{SB}}\left(f_{\theta}^{(-j)},\ \mathcal{D}_j\right)", "hpo")
+    b.p(r"where $f_{\theta}^{(-j)}$ is trained without inner fold $\mathcal{D}_j$. The model is then refitted "
+        "with $\\hat{\\theta}$ on the whole training part. The grid has $9+9+6+5=29$ settings per block, so "
+        "one outer fold needs $29\\times3=87$ inner fits per block and the full 5 x 5 design about "
+        "$25\\times2\\times87=4350$. Grid search was preferred to random or Bayesian search because the grid is "
+        "small, each fit takes milliseconds and an exhaustive search is easy to reproduce. The grid was kept "
+        "coarse on purpose, since trying many settings on about 830 patients would itself overfit the inner "
+        "folds {cite:varma2006}.")
     b.table(["Model", "Hyperparameters searched", "Most often chosen (25 folds)"], [
         ["Logistic regression", "C in {0.01, 0.1, 1}; k in {10, 25, 50}", "C = 0.01 (strongest penalty)"],
         ["SVM (RBF)", "C in {0.1, 1, 10}; k in {10, 25, 50}", "C = 0.1"],
@@ -507,9 +584,9 @@ def CONTENT(b):
           "predictions are frozen and hashed.", "protocol", width=6.2)
 
     # ---------------------------------------- source code (replaces firmware)
-    b.h2("Core Source Code")
+    b.h2("Core Source Code", "code")
     b.p("The project was written in Python, and the complete code is available in the GitHub repository given "
-        "in Section 7.3. The most important parts are listed below: the site-balanced metric and feature ranking "
+        "in {sec:github}. The most important parts are listed below: the site-balanced metric and feature ranking "
         "({tab:code1}), the ComBat harmoniser ({tab:code2}), and nested model selection, ensembling and "
         "leave-one-hospital-out testing ({tab:code3}).")
     (a1, a2), (c1, c2), (d1, d2) = code_blocks()
@@ -521,7 +598,7 @@ def CONTENT(b):
            "test with label-free harmonisation (right)", "code3")
 
     # ------------------------------------------------------------ implementation
-    b.h1("Implementation")
+    b.h1("Implementation", "impl")
     b.h2("Description")
     b.sub("Environment")
     b.p("All work ran on one laptop. {tab:env} lists the hardware and main software. Three "
@@ -570,6 +647,30 @@ def CONTENT(b):
     b.p("One full 5 x 5 nested cross-validation of one feature block takes about 10 seconds to a "
         "few minutes with 14 parallel jobs, because the models are small. All splits, random seeds, chosen "
         "hyperparameters, out-of-fold predictions, metrics and package versions were saved for reproducibility.")
+    b.h2("Computational Cost", "cost")
+    b.p("{tab:cost} lists the running time of every stage. Segmentation and feature-extraction times come from "
+        "the run logs. The model times were measured again for this report on the laptop CPU (8-core AMD Ryzen, "
+        "one process), using the same frozen model as the locked tests.")
+    b.table(["Stage", "Hardware", "Measured time", "Per patient"], [
+        ["Tumour detection (TotalSegmentator, external data only)", "laptop", "136 min for 89 Lung3 scans", "about 92 s"],
+        ["Tumour outlining (MedSAM2)", "RTX 3050 GPU", "38 min for 1041 patients", "2.2 s"],
+        ["Texture features (PyRadiomics, 12 parallel jobs)", "CPU", "19 min for 1041 patients", "1.1 s"],
+        ["Position features (4 parallel jobs)", "CPU", "16 min for 1041 patients", "0.9 s"],
+        ["Fit final model incl. inner grid search (2 blocks)", "CPU, 1 core", "4.4 s", "-"],
+        ["One outer CV fold (2 blocks)", "CPU, 1 core", "3.3 s", "-"],
+        ["Full 5 x 5 nested CV of the fused model", "CPU, 1 core", "about 1.4 min", "-"],
+        ["Prediction (2 blocks, 8 models)", "CPU, 1 core", "-", "0.13 ms in a batch, 1.7 ms alone"],
+    ], "Measured computational cost of the pipeline", "cost", widths=[2.5, 1.0, 1.55, 1.15], align="lccc", size=9)
+    b.p("The number of floating-point operations (FLOPs) needed to score one patient follows from the model "
+        "sizes. A linear model needs one multiply and one add per feature, the RBF SVM evaluates the kernel once "
+        "per support vector, each tree costs about one comparison per level, and the preparation chain adds "
+        "about $7p$ operations:")
+    b.eq(r"F_{\mathrm{LR}}\approx2k+1,\qquad F_{\mathrm{SVM}}\approx n_{\mathrm{SV}}\left(3k+22\right),\qquad F_{\mathrm{GBM}}\approx\sum_{m=1}^{M}\bar{d}_m", "flops")
+    b.p(r"where $\bar{d}_m$ is the mean depth of tree $m$ and the constant 22 covers the exponential. This gives "
+        "about 143,000 FLOPs for the shells block and 48,000 for the position block, so about 0.19 MFLOPs per "
+        "patient, most of it in the SVM. The saved model takes 3.2 MB, again mostly support vectors. The "
+        "classifier is therefore negligible: almost all of the roughly 2 minutes needed for a new patient is "
+        "spent in tumour detection and outlining by the frozen image networks.")
     b.h2("Implementation Challenges")
     b.bullets([
         "Different DICOM types. Eight Lung-PET-CT-Dx patients had annotations only on a secondary-capture "
@@ -586,29 +687,47 @@ def CONTENT(b):
 
     # ------------------------------------------------------- analysis & evaluation
     b.h1("Design Analysis and Evaluation")
-    b.h2("Novelty")
-    b.p("We did not invent ComBat, MedSAM2 or weighted AUC individually. The novelty of the project lies in how "
-        "they are combined and in how the model is evaluated:")
+    b.h2("Novelty", "novelty")
+    b.p("Earlier CT studies of ADC versus SCC were mostly trained and tested inside one hospital or on randomly "
+        "mixed data from several hospitals, used expert tumour outlines, and reported a pooled AUC. Under these "
+        "conditions a model can score well by recognising the hospital instead of the tumour ({sec:analysis}). "
+        "The novelty of this project is a complete CT pipeline, and an evaluation of it, in which the reported "
+        "accuracy cannot come from this hospital shortcut. ComBat, MedSAM2 and weighted AUCs existed before; "
+        "what is new is the following (summarised in {tab:novelty}):")
     b.bullets([
-        "Explicit measurement of the hospital shortcut for ADC/SCC. We show that the hospital name alone "
-        "gives a pooled AUC of 0.71 and use a site-balanced AUC that provably gives 0.5 to any hospital-only "
-        "predictor ({eq:proof}). The honest score improved from 0.642 (naive model) to 0.722.",
-        "Fully automatic, uniform tumour outlining. TotalSegmentator plus a single MedSAM2 box prompt gives "
-        "masks at Dice 0.85 against experts, with the same method at every hospital so that the mask source is "
-        "not a hidden fingerprint.",
-        "Four hospitals, 1041 patients, three countries. To our knowledge this is one of the largest public "
-        "multi-hospital sets used for this task, and it allowed leave-one-hospital-out testing (0.714).",
-        "Locked, pre-registered external tests. The plan was written first, predictions were hashed before the "
-        "labels were opened, and each test was scored once (Lung3 0.686, TCGA 0.585).",
-        "A fair comparison of simple and deep models. Attention-MIL, CNN features, two foundation models and "
-        "adversarial fine-tuning were all tested under the same protocol and all scored lower.",
-    ])
+        "A shortcut-proof metric. The site-balanced AUC is proved to give exactly 0.5 to any predictor that only "
+        "knows the hospital ({eq:proof}). Under it the naive radiomics model falls from 0.727 to 0.642, while the "
+        "final model reaches 0.722.",
+        "Label-free harmonisation of a new hospital. ComBat is fitted inside every training fold, and an unseen "
+        "hospital is mapped using only its unlabelled features ({eq:combat_raw}). This removed most of the "
+        "scanner fingerprint (hospital detector 0.81-0.91 before, 0.56-0.64 after).",
+        "Uniform automatic tumour outlining. The same TotalSegmentator and MedSAM2 chain is used at every "
+        "hospital (Dice 0.85 against experts), so the source of the mask cannot become a hidden hospital "
+        "fingerprint.",
+        "Peritumoral shells combined with tumour position. Texture in three distance shells around the tumour, "
+        "fused with 13 position and clinical features, beat every other combination of the seven feature blocks "
+        "we tested.",
+        "Multi-hospital and locked external validation. 1041 patients from four hospitals in three countries "
+        "allowed leave-one-hospital-out testing (0.714), and two external tests were pre-registered, hashed and "
+        "scored once (Lung3 0.686, TCGA 0.585).",
+        "A fair comparison of small and large models. Attention-MIL, CNN features, two CT foundation models and "
+        "adversarial fine-tuning were tested under the same protocol, and all scored below the final model, "
+        "which has only 4,837 trainable parameters.",
+    ], numbered=True)
+    b.table(["Aspect", "Usual practice in earlier studies", "This work"], [
+        ["Main metric", "pooled AUC", "site-balanced AUC that ignores the hospital"],
+        ["Hospital differences", "ignored, or hospitals mixed at random", "ComBat in every fold; leave-one-hospital-out test"],
+        ["Tumour masks", "expert outlines", "automatic, identical method at every hospital"],
+        ["External test", "often none, or several models tried on it", "pre-registered, hashed, scored once"],
+        ["Model size", "deep CNNs with millions of parameters", "4,837 trainable parameters"],
+    ], "Usual practice in published ADC/SCC studies compared with this work", "novelty",
+        widths=[1.4, 2.3, 2.5], size=9)
 
     b.h2("Design Considerations (PO(c))")
     b.h3("Considerations to public health and safety")
     b.p("The model is designed as decision support. Its output is a score, not a diagnosis, and a biopsy is still "
         "needed for treatment decisions and gene testing. With a sensitivity of 0.61 and a specificity of 0.68 at "
-        "the default threshold (Section 5.3.3), a wrong prediction is common enough that the score must never be "
+        "the default threshold ({sec:results}), a wrong prediction is common enough that the score must never be "
         "used alone. Several safety choices follow from this: the threshold is fixed in advance, the model reports "
         "results per hospital, and we state clearly that it should not be used on 5 mm CT, where external "
         "performance was at chance. Because the pipeline uses only the CT that the patient already has, it adds "
@@ -627,7 +746,7 @@ def CONTENT(b):
         "unknown and must be tested locally before any use. The site-balanced evaluation is also a societal "
         "consideration: it makes sure that a hospital with fewer patients is not ignored by the metric.")
 
-    b.h2("Investigations (PO(d))")
+    b.h2("Investigations (PO(d))", "invest")
     b.h3("Design of Experiment")
     b.p("Each experiment changed one part of the system while the folds, seeds and metric stayed the same, so "
         "that differences could be attributed to that part. {tab:doe} lists the experiments.")
@@ -663,7 +782,79 @@ def CONTENT(b):
         "patients without a usable CT and 1 with no detected nodule. The selection used only metadata, never "
         "image-based predictions.")
 
-    b.h3("Results and Analysis")
+    b.h3("Dataset Statistical Analysis", "datastats")
+    b.p("Before modelling, the cohorts and the two classes were compared statistically to separate real "
+        "differences between ADC and SCC from differences between hospitals. {tab:demog} gives the patient and "
+        "tumour characteristics and {fig:stats_clin} their distributions. Tumour volume and the lung-boundary "
+        "contact fraction come from the automatic MedSAM2 masks ({sec:seg}); age and sex come from the clinical "
+        "files or DICOM headers.")
+    b.table(["Cohort", "Class", "n", "Age, years (mean +/- SD)", "Male (%)", "Volume, ml (median [IQR])", "Boundary contact (median)"], [
+        ["LUNG1", "ADC", "51", "68.1 +/- 10.7", "68.6", "44.0 [12.4, 120.7]", "0.39"],
+        ["", "SCC", "151", "68.7 +/- 9.8", "72.2", "48.5 [13.3, 104.6]", "0.50"],
+        ["Radiogenomics", "ADC", "112", "68.7 +/- 9.4", "71.4", "6.3 [3.1, 19.7]", "0.04"],
+        ["", "SCC", "29", "71.1 +/- 6.1", "86.2", "8.2 [2.4, 27.4]", "0.18"],
+        ["Lung-PET-CT-Dx", "ADC", "244", "61.0 +/- 10.2", "47.5", "21.1 [8.5, 45.1]", "0.20"],
+        ["", "SCC", "57", "63.0 +/- 9.2", "77.2", "70.3 [38.4, 130.2]", "0.53"],
+        ["NLST", "ADC", "290", "64.6 +/- 5.2", "51.7", "4.4 [2.4, 10.8]", "0.04"],
+        ["", "SCC", "107", "65.1 +/- 5.2", "81.3", "9.4 [3.0, 22.1]", "0.11"],
+        ["Lung3 (test)", "ADC", "44", "63.8 +/- 10.0", "54.5", "15.2 [6.6, 42.2]", "0.33"],
+        ["", "SCC", "35", "66.5 +/- 7.1", "80.0", "60.5 [20.8, 130.0]", "0.43"],
+        ["TCGA (test)", "ADC", "48", "65.5 +/- 9.2", "43.8", "7.6 [2.8, 25.3]", "0.21"],
+        ["", "SCC", "36", "68.9 +/- 10.8", "55.6", "31.7 [5.3, 66.1]", "0.24"],
+    ], "Patient and tumour characteristics of each cohort by class. Age was missing for 4 development and 7 "
+       "test patients.", "demog", widths=[1.15, 0.5, 0.45, 1.15, 0.65, 1.35, 0.95], align="lcccccc", size=8.5)
+    b.fig("fig_stats_clinical.png", "Age, tumour volume (log scale) and lung-boundary contact fraction by cohort "
+          "and class. Boxes show the median and interquartile range, whiskers 1.5 times the IQR. * locked "
+          "external test sets.", "stats_clin", width=6.2)
+    b.p("ADC and SCC were compared with the Mann-Whitney test {cite:mann1947} for continuous variables. Its "
+        "statistic counts the ADC-SCC pairs in which the ADC value is larger,")
+    b.eq(r"U=\sum_{i:y_i=1}\sum_{j:y_j=0}\left[\mathbb{1}(x_i>x_j)+\frac{1}{2}\mathbb{1}(x_i=x_j)\right],\qquad \mathrm{AUC}_x=\frac{U}{n_1n_0}", "mw")
+    b.p("so $U/(n_1n_0)$ is simply the AUC of the variable used as a score {cite:hanley1982}. Differences "
+        "between the $K=4$ hospitals were tested with the Kruskal-Wallis test {cite:kruskal1952}, and binary "
+        r"variables with the $\chi^2$ test:")
+    b.eq(r"H=\frac{12}{N(N+1)}\sum_{h=1}^{K}n_h\bar{R}_h^{2}-3(N+1),\qquad \eta^2_H=\frac{H-K+1}{N-K}", "kw")
+    b.eq(r"\chi^2=\sum_{c}\frac{(O_c-E_c)^2}{E_c}", "chi2")
+    b.p(r"where $\bar{R}_h$ is the mean rank of hospital $h$ among all $N$ patients, $\eta^2_H$ is the share of "
+        "variation explained by the hospital, and $O_c$, $E_c$ are observed and expected counts. When many "
+        "features are tested at once, the Benjamini-Hochberg procedure {cite:benjamini1995} sorts the $m$ "
+        "p-values and rejects all hypotheses up to the largest $i$ with $p_{(i)}\\le iq/m$, which keeps the "
+        "expected share of false discoveries below $q=0.05$.")
+    b.table(["Variable", "ADC", "SCC", "p (ADC vs SCC)", "p (hospitals)", "Within-hospital AUC"], [
+        ["Age, years (median)", "64.0", "67.0", "< 0.001", "< 0.001", "0.46"],
+        ["Male sex (%)", "54.7", "77.0", "< 0.001", "< 0.001", "0.40"],
+        ["Tumour volume, ml (median)", "9.1", "26.3", "< 0.001", "< 0.001", "0.40"],
+        ["Left lung (%)", "41.5", "39.8", "0.66", "0.81", "0.52"],
+        ["Relative height in lung (median)", "0.63", "0.52", "< 0.001", "< 0.001", "0.59"],
+        ["Lung-boundary contact (median)", "0.09", "0.32", "< 0.001", "< 0.001", "0.36"],
+        ["Depth of tumour centre, mm (median)", "14.1", "14.1", "0.89", "0.24", "0.51"],
+    ], "Statistical comparison of the 1041 development patients (697 ADC, 344 SCC). The last column is the mean "
+       "AUC of the raw variable inside each hospital (below 0.5: lower in ADC).", "stattests",
+        widths=[2.0, 0.6, 0.6, 1.0, 0.95, 1.05], align="lccccc", size=9)
+    b.p("{tab:stattests} shows that SCC patients were older and more often male, and that their tumours were "
+        "larger and touched the lung boundary more often, which fits the central location of SCC. ADC tumours lay "
+        "higher in the lung, while the side and depth of the tumour did not differ. Almost every variable also "
+        "differed strongly between hospitals: LUNG1 tumours (median 48 ml, mostly stage III) were about nine times "
+        "larger than NLST screening tumours (5 ml). Pooled p-values mix these hospital differences with the "
+        "class difference, so the last column compares ADC and SCC only inside the same hospital. Even there, "
+        "sex, volume and boundary contact are the strongest single variables (AUC 0.36-0.40, or 0.60-0.64 with "
+        "the sign reversed), which explains why the position and clinical block is strong on its own.")
+    b.p("The same tests were run on the 279 shell texture features ({fig:stats_feat}). Before ComBat, 277 "
+        "features (99%) differed significantly between hospitals after Benjamini-Hochberg correction, with a "
+        r"median $\eta^2_H$ of 0.098. After ComBat only 23 (8%) still did, and the median $\eta^2_H$ fell to "
+        "about zero. ComBat shifts and scales each hospital as a whole, so the ADC/SCC separation inside a "
+        r"hospital is unchanged: $\rho_g$ of {eq:rank} has a median of 0.09 and a maximum of 0.20, reached by "
+        "the normalised grey-level non-uniformity of the 0-4 mm shell. For ADC versus SCC, 252 features were "
+        "significant in at least one hospital and 127 in at least two, but none in all four, so no single "
+        "texture feature works everywhere. The features are also redundant: 14% of all feature pairs have "
+        "$|r|>0.7$ and 2.9% have $|r|>0.9$, which is why correlated features are pruned before selection.")
+    b.fig("fig_stats_features.png", "Statistics of the 279 shell features (1041 patients). (a) Hospital effect "
+          "size before and after ComBat (log scale). (b) Number of features with a significant difference "
+          "between hospitals, and between ADC and SCC inside at least one or two hospitals (Benjamini-Hochberg, "
+          "q < 0.05). ComBat removes most hospital differences and leaves the ADC/SCC differences unchanged. "
+          "(ComBat fitted on all "
+          "patients for illustration only.)", "stats_feat", width=6.2)
+
+    b.h3("Results and Analysis", "results")
     b.sub("Early approach: attention-MIL on local patches")
     b.p("The project began with a weakly supervised "
         "attention-MIL model on LUNG1 {cite:ilse2018,lu2021}, where each patient was a bag of 1 cm radiomic "
@@ -704,11 +895,23 @@ def CONTENT(b):
         ["Radiogenomics", "141 (112/29)", "0.710", "0.616", "0.724", "0.670"],
         ["Lung-PET-CT-Dx", "301 (244/57)", "0.852", "0.561", "0.877", "0.719"],
         ["NLST", "397 (290/107)", "0.694", "0.662", "0.645", "0.653"],
-        ["All (site-balanced)", "1041 (697/344)", "0.722", "0.607", "0.680", "0.644"],
-    ], "Cross-validation results per hospital at the threshold s = 0", "perhosp",
+        ["All patients", "1041 (697/344)", "0.722*", "0.607", "0.680", "0.644"],
+    ], "Cross-validation results per hospital at the threshold s = 0 (*site-balanced AUC)", "perhosp",
         widths=[1.4, 1.2, 0.7, 0.9, 0.9, 1.0], align="lccccc")
     b.fig("fig_confusion.png", "Confusion matrices at the threshold s = 0 for cross-validation and the two "
           "locked external tests. Percentages are per true class.", "confusion", width=6.2)
+    b.p("{tab:allmetrics} gives the complete set of threshold metrics of {eq:metrics2} and {eq:mcc}. In "
+        "cross-validation the PPV (0.79) is much higher than the NPV (0.46) only because two thirds of the "
+        "patients are ADC; with site-balanced weights the two are close (0.67 and 0.63). The MCC is about 0.3 in "
+        "cross-validation and on Lung3 and 0.14 on TCGA, which confirms that the model carries real but "
+        "moderate information and cannot replace a biopsy.")
+    b.table(["Data", "Acc", "Se", "Sp", "BA", "PPV", "NPV", "F1", "MCC"], [
+        ["CV, all patients", "0.631", "0.607", "0.680", "0.644", "0.794", "0.461", "0.688", "0.270"],
+        ["CV, site-balanced", "0.650", "0.582", "0.717", "0.650", "0.673", "0.632", "0.625", "0.302"],
+        ["Lung3 (locked)", "0.658", "0.636", "0.686", "0.661", "0.718", "0.600", "0.675", "0.320"],
+        ["TCGA (locked)", "0.571", "0.562", "0.583", "0.573", "0.643", "0.500", "0.600", "0.144"],
+    ], "Threshold metrics at s = 0 (CV: out-of-fold scores averaged over the 5 seeds)", "allmetrics",
+        widths=[1.4, 0.55, 0.55, 0.55, 0.55, 0.55, 0.55, 0.55, 0.6], align="lcccccccc", size=9)
     b.sub("Unseen hospitals (LOSO, E6)")
     b.p("{fig:loso} compares each hospital's score when it was part of the "
         "training data (pooled CV) with its score when it was left out completely. The drop is very small "
@@ -728,50 +931,6 @@ def CONTENT(b):
           "coloured by hospital.", "pca", width=5.8)
     b.fig("fig_siteleak.png", "Hospital-detector AUC before and after ComBat (three-hospital stage). 0.5 means "
           "the hospital cannot be recognised.", "siteleak", width=4.6)
-    b.sub("Ablation (E3, E5)")
-    b.p("{fig:ablation} shows the site-balanced AUC of each feature block and of the "
-        "fusions, all with MedSAM2 masks and ComBat. The handcrafted blocks are close to each other (0.698-0.709), "
-        "the two deep-feature blocks are clearly lower, and fusing shells with position gives the best "
-        "pre-specified result. {tab:ablation} lists the effect of each design change.")
-    b.fig("fig_ablation.png", "Ablation: site-balanced AUC of single feature blocks and fusions (5 x 5 CV, 1041 "
-          "patients). Red bars are deep features. Note that the x-axis starts at 0.6.", "ablation", width=5.2)
-    b.table(["Change", "Before", "After", "Conclusion"], [
-        ["Threshold masks to MedSAM2 masks", "0.714", "0.722", "better masks give better features"],
-        ["3 to 4 training hospitals (LOSO mean)", "0.682", "0.704", "more diverse data helps transfer"],
-        ["Best single block to shells + position", "0.709", "0.722", "the two blocks are complementary"],
-        ["Shells + position to all 7 blocks", "0.722", "0.720", "more features add noise, not signal"],
-        ["ComBat off to on (hospital detector)", "0.81-0.91", "0.56-0.64", "fingerprint largely removed"],
-        ["Single model to 4-model ensemble (shells)", "0.677-0.697", "0.700", "ensemble is more stable"],
-    ], "Effect of individual design changes (site-balanced AUC unless stated)", "ablation",
-        widths=[2.3, 0.9, 0.9, 2.1], align="lccl")
-    b.sub("Ensemble and tuning")
-    b.p("{fig:models} compares each classifier with the ensemble. No single model is "
-        "best in both blocks (ridge is best for shells, SVM for position), but the four-model ensemble is better "
-        "than every single model in both blocks, and fusing the two blocks adds a further 0.013. {fig:hparams} "
-        "shows which hyperparameters the inner cross-validation chose in the 25 outer folds. The simplest option "
-        "won almost every time: C = 0.01 for logistic regression, C = 0.1 for the SVM and 4-leaf trees. This is a "
-        "sign that the data are noisy and small, and that more flexible models would mainly fit noise.")
-    b.fig("fig_models.png", "Site-balanced AUC of each classifier, of the four-model ensemble per block, and of "
-          "the fused final model.", "models", width=5.6)
-    b.fig("fig_hparams.png", "How often each hyperparameter value was chosen by the inner 3-fold "
-          "cross-validation in the 25 outer folds.", "hparams", width=6.2)
-    b.sub("Deep-learning alternatives (E7)")
-    b.p("{tab:deep} lists the larger models that were tried under the "
-        "same protocol. Frozen FMCIB features {cite:fmcib} reached 0.675. CT-FM {cite:ctfm} reached 0.662 and kept "
-        "hospital information even after ComBat (detector 0.765), probably because its whole-CT pre-training "
-        "encodes scanner style. Fine-tuning the last block of FMCIB (35 million parameters) with a gradient-reversal "
-        "hospital adversary {cite:ganin2016} overfitted within a few epochs and scored 0.606, with a detector AUC "
-        "of 0.815. With about 660 training patients per fold, the networks learned hospital and noise faster than "
-        "histology.")
-    b.table(["Approach", "Site-balanced AUC", "LOSO mean", "Hospital detector", "Finding"], [
-        ["Attention-MIL on FMCIB crop bags", "0.669", "0.634", "n/a", "did not beat mean pooling"],
-        ["FMCIB, frozen (3-D ResNet-50)", "0.675", "0.660", "0.263", "weaker than handcrafted features"],
-        ["CT-FM, frozen", "0.662", "0.652", "0.765", "kept hospital identity"],
-        ["Fine-tuned CNN", "0.615", "0.644", "0.814", "overfitted"],
-        ["Fine-tuned CNN + adversary", "0.606", "0.651", "0.815", "adversary did not remove hospital"],
-        ["Final model (shells + position)", "0.722", "0.714", "0.54-0.61", "best and simplest"],
-    ], "Deep-learning alternatives compared with the final model", "deep",
-        widths=[1.85, 0.95, 0.75, 0.9, 1.75], align="lcccl", size=9)
     b.sub("Project journey")
     b.p("{fig:journey} shows the main AUC at each stage of the project. The points use "
         "different data and metrics, so the plot tells the story rather than giving a strict comparison. The "
@@ -797,11 +956,63 @@ def CONTENT(b):
     ], "Locked external test results of the pre-registered model. The thin/thick split was pre-declared for "
        "Lung3 and post hoc for TCGA.", "external", widths=[0.65, 0.8, 1.3, 0.5, 0.5, 0.5, 0.95, 0.95],
         align="lcccccccc"[:8], size=8.5)
-    b.sub("Comparison with existing work")
+    b.h3("Ablation Study", "ablation")
+    b.p("The ablation study removes or replaces one part of the system at a time (experiments E3, E5 and "
+        "E7 of {tab:doe}) while the folds, seeds and metric stay the same.")
+    b.p("{fig:ablation} shows the site-balanced AUC of each feature block and of the "
+        "fusions, all with MedSAM2 masks and ComBat. The handcrafted blocks are close to each other (0.698-0.709), "
+        "the two deep-feature blocks are clearly lower, and fusing shells with position gives the best "
+        "pre-specified result. {tab:ablation} lists the effect of each design change.")
+    b.fig("fig_ablation.png", "Ablation: site-balanced AUC of single feature blocks and fusions (5 x 5 CV, 1041 "
+          "patients). Red bars are deep features. Note that the x-axis starts at 0.6.", "ablation", width=5.2)
+    b.table(["Change", "Before", "After", "Conclusion"], [
+        ["Threshold masks to MedSAM2 masks", "0.714", "0.722", "better masks give better features"],
+        ["3 to 4 training hospitals (LOSO mean)", "0.682", "0.704", "more diverse data helps transfer"],
+        ["Best single block to shells + position", "0.709", "0.722", "the two blocks are complementary"],
+        ["Shells + position to all 7 blocks", "0.722", "0.720", "more features add noise, not signal"],
+        ["ComBat off to on (hospital detector)", "0.81-0.91", "0.56-0.64", "fingerprint largely removed"],
+        ["Single model to 4-model ensemble (shells)", "0.677-0.697", "0.700", "ensemble is more stable"],
+    ], "Effect of individual design changes (site-balanced AUC unless stated)", "ablation",
+        widths=[2.3, 0.9, 0.9, 2.1], align="lccl")
+    b.sub("Ensemble")
+    b.p("{fig:models} compares each classifier with the ensemble. No single model is "
+        "best in both blocks (ridge is best for shells, SVM for position), but the four-model ensemble is better "
+        "than every single model in both blocks, and fusing the two blocks adds a further 0.013.")
+    b.fig("fig_models.png", "Site-balanced AUC of each classifier, of the four-model ensemble per block, and of "
+          "the fused final model.", "models", width=5.6)
+    b.sub("Deep-learning alternatives (E7)")
+    b.p("{tab:deep} lists the larger models that were tried under the "
+        "same protocol. Frozen FMCIB features {cite:fmcib} reached 0.675. CT-FM {cite:ctfm} reached 0.662 and kept "
+        "hospital information even after ComBat (detector 0.765), probably because its whole-CT pre-training "
+        "encodes scanner style. Fine-tuning the last block of FMCIB (35 million parameters) with a gradient-reversal "
+        "hospital adversary {cite:ganin2016} overfitted within a few epochs and scored 0.606, with a detector AUC "
+        "of 0.815. With about 660 training patients per fold, the networks learned hospital and noise faster than "
+        "histology.")
+    b.table(["Approach", "Site-balanced AUC", "LOSO mean", "Hospital detector", "Finding"], [
+        ["Attention-MIL on FMCIB crop bags", "0.669", "0.634", "n/a", "did not beat mean pooling"],
+        ["FMCIB, frozen (3-D ResNet-50)", "0.675", "0.660", "0.263", "weaker than handcrafted features"],
+        ["CT-FM, frozen", "0.662", "0.652", "0.765", "kept hospital identity"],
+        ["Fine-tuned CNN", "0.615", "0.644", "0.814", "overfitted"],
+        ["Fine-tuned CNN + adversary", "0.606", "0.651", "0.815", "adversary did not remove hospital"],
+        ["Final model (shells + position)", "0.722", "0.714", "0.54-0.61", "best and simplest"],
+    ], "Deep-learning alternatives compared with the final model", "deep",
+        widths=[1.85, 0.95, 0.75, 0.9, 1.75], align="lcccl", size=9)
+    b.h3("Hyperparameter Optimisation", "hporesults")
+    b.p("The search of {eq:hpo} was run inside every one of the 25 outer folds. {fig:hparams} shows how often "
+        "each value was chosen. The simplest option won almost every time: C = 0.01 for logistic regression, "
+        "C = 0.1 for the SVM and 4-leaf trees. This is a sign that the data are noisy and small, and that more "
+        "flexible models would mainly fit noise. For the final model fitted on all 1041 patients the search chose "
+        "k = 50, C = 0.1 (logistic regression), C = 1 (SVM), 4 leaves and ridge C = 0.003 for the shells block, "
+        "and k = 25, C = 0.01, C = 0.1, 4 leaves and ridge C = 0.01 for the position block. For all eight "
+        "models, the mean inner score of the chosen setting was within 0.011 of the outer test score of the same "
+        "model ({fig:models}), so the tuning itself caused almost no optimistic bias.")
+    b.fig("fig_hparams.png", "How often each hyperparameter value was chosen by the inner 3-fold "
+          "cross-validation in the 25 outer folds.", "hparams", width=6.2)
+    b.h3("Comparison with Existing Works", "compare")
     b.p("{tab:compare} places our results next to published studies. "
         "Scores above 0.8 mostly come from one hospital or from random splits of pooled data. On truly "
         "independent hospitals the published range is about 0.54-0.73. On the same external dataset (Lung3) our "
-        "locked result of 0.686 is higher than the 0.60 of Chaunzwa *et al., while Song et al.* report 0.80 on "
+        "locked result of 0.686 is higher than the 0.60 of Chaunzwa *et al.*, while Song *et al.* report 0.80 on "
         "Lung3 and 0.82 on TCGA. Their numbers were obtained with expert tumour masks, by choosing the best of 130 "
         "models on the test sets, and with hospitals mixed randomly in training, so the two results were produced "
         "under different rules.")
@@ -947,7 +1158,7 @@ def CONTENT(b):
     b.p("Lung adenocarcinoma and squamous cell carcinoma are the two most common types of lung cancer and are treated differently, but the type is usually confirmed only by biopsy. This project developed an automatic method that estimates the type from the routine chest CT scan. The software outlines the tumour, measures its position and surrounding texture, and corrects for differences between hospital scanners. It was developed on 1041 patients from four public datasets and tested on two datasets kept aside until the end. On unseen hospitals it reached an AUC of about 0.7 (0.5 is guessing, 1.0 is perfect). It is a research tool to support, not replace, biopsy.")
     b.h2("User Manual")
     b.p("The steps below run the frozen model on a new CT scan. Commands are run from the project folder with the "
-        "Python environments described in Section 4.")
+        "Python environments described in {sec:impl}.")
     b.bullets([
         "Install. Create the three environments (main, MedSAM2, TotalSegmentator) from the saved requirement "
         "files, and download the MedSAM2 checkpoint.",
@@ -964,9 +1175,9 @@ def CONTENT(b):
         "Read the result. A score above 0 suggests ADC and below 0 suggests SCC; values near 0 are uncertain. "
         "The result must be interpreted by a doctor together with other clinical information.",
     ], numbered=True)
-    b.h2("Github Link")
+    b.h2("Github Link", "github")
     b.p("The complete source code, configuration files, documentation, this report and the presentation slides "
-        "are available in the GitHub repository below. The core parts of the code are also listed in Section 3.7.")
+        "are available in the GitHub repository below. The core parts of the code are also listed in {sec:code}.")
     b.p("https://github.com/raahiibbb/ADC-SCC-CT-Radiomics", align="left", human=False)
 
     # ------------------------------------------------------------ management
@@ -979,7 +1190,7 @@ def CONTENT(b):
         ["Software", "Python, PyRadiomics, scikit-learn, LightGBM, PyTorch, MedSAM2, TotalSegmentator", "Free (open source)"],
         ["Computing", "Existing laptop with an NVIDIA RTX 3050 GPU (4 GB)", "No extra cost"],
     ], "Resources used in the project", "bom", widths=[1.1, 3.7, 1.4])
-    b.p("The finished pipeline needs about 2.5 minutes per patient on the same laptop, so applying it to new "
+    b.p("The finished pipeline needs about 2 minutes per patient on the same laptop, so applying it to new "
         "patients would not require special hardware.")
     b.h2("Timeline of Project Implementation")
     b.p("{fig:gantt} shows the timeline as a Gantt chart. The work was done in eight weeks: the mid-term break "

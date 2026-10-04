@@ -99,7 +99,7 @@ docs/           report, slides, phase reports, pre-registrations, figures
 | Shortcut demonstration | `phase10_shortcut_demo.py` |
 | Adversarial fine-tuning (negative result) | `phase13_advft.py` |
 | Locked tests | `phase14_test.py` (TCGA), `phase14b_lung3.py` (Lung3) |
-| Report and slide figures | `report_figures.py`, `slides_figures.py`, `build_report.py`, `report_content.py` |
+| Report and slide figures | `report_figures.py`, `report_stats.py`, `slides_figures.py`, `build_report.py`, `report_content.py` |
 
 ### Early phase: attention-MIL (before the progress presentation)
 

@@ -77,6 +77,8 @@ def fill_nary(root):
 
 def omml(latex, display=False):
     mml = latex2mathml.converter.convert(latex, display="block" if display else "inline")
+    # MML2OMML drops <mspace>, so \quad / \qquad become em-space characters
+    mml = re.sub(r'<mspace width="(\d+)em"\s*/>', lambda m: "<mtext>" + " " * int(m.group(1)) + "</mtext>", mml)
     m = XSL(etree.fromstring(mml.encode())).getroot()
     fill_nary(m)
     if display:
@@ -122,7 +124,7 @@ class Numbers:
     """label -> number, assigned in a dry run (order of appearance)."""
 
     def __init__(self):
-        self.fig, self.tab, self.eq, self.ref = {}, {}, {}, {}
+        self.fig, self.tab, self.eq, self.ref, self.sec = {}, {}, {}, {}, {}
 
     def resolve(self, text):
         def f(m):
@@ -135,11 +137,13 @@ class Numbers:
                         self.ref[k] = len(self.ref) + 1
                     nums.append(self.ref[k])
                 return "[" + ", ".join(str(n) for n in sorted(nums)) + "]"
-            d = {"fig": self.fig, "tab": self.tab, "eq": self.eq}[kind]
+            d = {"fig": self.fig, "tab": self.tab, "eq": self.eq, "sec": self.sec}[kind]
             if keys not in d:
                 return "??"
+            if kind == "sec":
+                return "Section " + d[keys]
             return {"fig": "Figure ", "tab": "Table ", "eq": "Eq. ("}[kind] + str(d[keys]) + (")" if kind == "eq" else "")
-        return re.sub(r"\{(fig|tab|eq|cite):([^}]+)\}", f, text)
+        return re.sub(r"\{(fig|tab|eq|cite|sec):([^}]+)\}", f, text)
 
 
 # ====================================================================== builder
@@ -148,6 +152,7 @@ class Builder:
         self.doc, self.n, self.dry = doc, nums, dry
         self.body = doc.element.body
         self.nfig = self.ntab = self.neq = 0
+        self.hnum = [0, 0, 0]            # running heading numbers (h1, h2, h3), as Word numbers them
         self.num_id = None
         self.uid = 0                     # running id of prose units (paragraphs, bullets, captions)
         self.units = []                  # (uid, resolved original text) for the QuillBot export
@@ -204,15 +209,25 @@ class Builder:
         p = self.doc.add_paragraph(style=style)
         return p
 
-    def h1(self, t):
+    def _heading(self, level, label):
+        self.hnum[level - 1] += 1
+        for k in range(level, 3):
+            self.hnum[k] = 0
+        if label:
+            self.n.sec[label] = ".".join(str(v) for v in self.hnum[:level])
+
+    def h1(self, t, label=None):
+        self._heading(1, label)
         if not self.dry:
             self.doc.add_paragraph(t, style="Heading 1")
 
-    def h2(self, t):
+    def h2(self, t, label=None):
+        self._heading(2, label)
         if not self.dry:
             self.doc.add_paragraph(" " + t, style="Heading 2")
 
-    def h3(self, t):
+    def h3(self, t, label=None):
+        self._heading(3, label)
         if not self.dry:
             self.doc.add_paragraph(t, style="Heading 3")
 
